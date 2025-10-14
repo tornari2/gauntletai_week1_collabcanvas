@@ -6,7 +6,7 @@ import { useCanvas } from '../context/CanvasContext'
 import { useAuth } from '../context/AuthContext'
 
 // Memoized Rectangle component for performance
-const Rectangle = memo(({ shape }) => {
+const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
   return (
     <Rect
       x={shape.x}
@@ -14,9 +14,23 @@ const Rectangle = memo(({ shape }) => {
       width={shape.width}
       height={shape.height}
       fill={shape.fillColor}
-      stroke={shape.borderColor}
-      strokeWidth={SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
-      listening={false}
+      stroke={isSelected ? userColor : shape.borderColor}
+      strokeWidth={isSelected ? SHAPE_DEFAULTS.SELECTION_STROKE_WIDTH : SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
+      listening={true}
+      onClick={onClick}
+      onTap={onClick}
+      onMouseEnter={(e) => {
+        const stage = e.target.getStage()
+        if (stage) {
+          stage.container().style.cursor = 'move'
+        }
+      }}
+      onMouseLeave={(e) => {
+        const stage = e.target.getStage()
+        if (stage) {
+          stage.container().style.cursor = 'default'
+        }
+      }}
       perfectDrawEnabled={false}
     />
   )
@@ -31,7 +45,7 @@ function Canvas() {
   const isPanning = useRef(false)
   
   // Canvas context and auth
-  const { shapes, creatingRectangle, setCreatingRectangle, addShape } = useCanvas()
+  const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape } = useCanvas()
   const { currentUser } = useAuth()
   
   // Rectangle creation state
@@ -247,6 +261,20 @@ function Canvas() {
     stage.batchDraw()
   }, [])
 
+  // Handle shape click for selection
+  const handleShapeClick = useCallback((shapeId) => {
+    selectShape(shapeId)
+  }, [selectShape])
+
+  // Handle stage click for deselection (click on empty canvas)
+  const handleStageClick = useCallback((e) => {
+    // Check if we clicked on the stage itself (not a shape)
+    const clickedOnEmpty = e.target === e.target.getStage()
+    if (clickedOnEmpty) {
+      selectShape(null)
+    }
+  }, [selectShape])
+
   return (
     <div ref={containerRef} className="canvas-container">
       {dimensions.width > 0 && dimensions.height > 0 ? (
@@ -259,13 +287,23 @@ function Canvas() {
           onMouseUp={handleMouseUp}
           onMouseMove={handleMouseMove}
           onWheel={handleWheel}
+          onClick={handleStageClick}
+          onTap={handleStageClick}
           style={{ backgroundColor: '#ffffff' }}
         >
           <Layer>
             {/* Render all shapes */}
             {shapes.map((shape) => {
               if (shape.type === 'rectangle') {
-                return <Rectangle key={shape.id} shape={shape} />
+                return (
+                  <Rectangle
+                    key={shape.id}
+                    shape={shape}
+                    isSelected={shape.id === selectedShapeId}
+                    userColor={currentUser?.colorHex || '#000000'}
+                    onClick={() => handleShapeClick(shape.id)}
+                  />
+                )
               }
               return null
             })}

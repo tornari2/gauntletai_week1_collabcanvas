@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../utils/firebase';
+import { db, auth } from '../utils/firebase';
 import { COLLECTIONS, GLOBAL_CANVAS_ID } from '../utils/constants';
 import { useAuth } from './AuthContext';
 
@@ -18,7 +18,7 @@ export function CanvasProvider({ children }) {
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
   const [creatingRectangle, setCreatingRectangle] = useState(false);
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
   
   // Set up Firestore listener for real-time shape updates
   useEffect(() => {
@@ -44,7 +44,7 @@ export function CanvasProvider({ children }) {
         setShapes(shapes);
       },
       (error) => {
-        console.error('Error listening to shapes:', error);
+        console.error('Firestore listener error:', error);
       }
     );
 
@@ -54,7 +54,13 @@ export function CanvasProvider({ children }) {
 
   // Add a new shape to the canvas (with Firebase sync)
   async function addShape(shape) {
-    if (!currentUser) return;
+    // Get user from context or directly from Firebase auth
+    const user = currentUser || auth.currentUser;
+    
+    if (!user) {
+      console.error('Cannot add shape: No authenticated user');
+      return;
+    }
     
     try {
       // Optimistic update: add to local state immediately
@@ -64,10 +70,10 @@ export function CanvasProvider({ children }) {
       const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shape.id);
       await setDoc(shapeRef, {
         ...shape,
-        ownerId: currentUser.uid,
+        ownerId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        lastModifiedBy: currentUser.uid,
+        lastModifiedBy: user.uid,
       });
     } catch (error) {
       console.error('Error adding shape:', error);
@@ -78,7 +84,8 @@ export function CanvasProvider({ children }) {
 
   // Update an existing shape (with Firebase sync)
   async function updateShape(shapeId, updates) {
-    if (!currentUser) return;
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
     
     try {
       // Optimistic update: update local state immediately
@@ -93,7 +100,7 @@ export function CanvasProvider({ children }) {
       await updateDoc(shapeRef, {
         ...updates,
         updatedAt: serverTimestamp(),
-        lastModifiedBy: currentUser.uid,
+        lastModifiedBy: user.uid,
       });
     } catch (error) {
       console.error('Error updating shape:', error);
@@ -103,7 +110,8 @@ export function CanvasProvider({ children }) {
 
   // Delete a shape from the canvas (with Firebase sync)
   async function deleteShape(shapeId) {
-    if (!currentUser) return;
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
     
     try {
       // Optimistic update: remove from local state immediately

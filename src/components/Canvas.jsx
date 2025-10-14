@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { CANVAS_CONFIG, SHAPE_DEFAULTS, SYNC_CONFIG } from '../utils/constants'
 import { useCanvas } from '../context/CanvasContext'
 import { useAuth } from '../context/AuthContext'
+import { getUserColorHex } from '../utils/colorGenerator'
 
 // Memoized Rectangle component for performance
 const Rectangle = memo(({ 
@@ -30,6 +31,7 @@ const Rectangle = memo(({
       y={shape.y}
       width={shape.width}
       height={shape.height}
+      rotation={shape.rotation || 0}
       fill={shape.fillColor}
       stroke={isSelected ? userColor : shape.borderColor}
       strokeWidth={isSelected ? SHAPE_DEFAULTS.SELECTION_STROKE_WIDTH : SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
@@ -72,6 +74,10 @@ function Canvas() {
   // Canvas context and auth
   const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape, deleteShape, updateShape } = useCanvas()
   const { currentUser, userProfile } = useAuth()
+  
+  // Get user color with fallback to generated color based on email
+  const userColor = userProfile?.colorHex || 
+    (currentUser?.email ? getUserColorHex(currentUser.email) : '#000000')
   
   // Rectangle creation state
   const [isDrawing, setIsDrawing] = useState(false)
@@ -120,25 +126,17 @@ function Canvas() {
     const container = containerRef.current
     if (!container) return
 
-    // Prevent context menu on right click (but allow with Cmd/Ctrl for inspect element)
-    const preventContextMenu = (e) => {
-      // Allow context menu when holding Cmd (Mac) or Ctrl (Windows/Linux) for inspect element
-      if (e.metaKey || e.ctrlKey) {
-        return
-      }
-      e.preventDefault()
-    }
-
     // Prevent default wheel behavior (browser zoom)
     const preventDefaultWheel = (e) => {
       e.preventDefault()
     }
 
-    container.addEventListener('contextmenu', preventContextMenu)
+    // TEMPORARILY ALLOW CONTEXT MENU FOR DEBUGGING
+    // Will add back after sync is working
+
     container.addEventListener('wheel', preventDefaultWheel, { passive: false })
 
     return () => {
-      container.removeEventListener('contextmenu', preventContextMenu)
       container.removeEventListener('wheel', preventDefaultWheel)
     }
   }, [])
@@ -249,6 +247,7 @@ function Canvas() {
     const node = e.target
     const scaleX = node.scaleX()
     const scaleY = node.scaleY()
+    const rotation = node.rotation()
     
     // Calculate new dimensions based on scale
     const newWidth = Math.max(SHAPE_DEFAULTS.MIN_SHAPE_SIZE, node.width() * scaleX)
@@ -258,12 +257,13 @@ function Canvas() {
     node.scaleX(1)
     node.scaleY(1)
     
-    // Update shape with new dimensions
+    // Update shape with new dimensions and rotation
     updateShape(shapeId, {
       x: node.x(),
       y: node.y(),
       width: newWidth,
       height: newHeight,
+      rotation: rotation,
       updatedAt: Date.now(),
       lastModifiedBy: currentUser?.uid || 'unknown'
     })
@@ -328,6 +328,7 @@ function Canvas() {
             y: Math.min(startPos.y, canvasPos.y),
             width,
             height,
+            rotation: 0,
             fillColor: SHAPE_DEFAULTS.DEFAULT_FILL_COLOR,
             borderColor: SHAPE_DEFAULTS.DEFAULT_STROKE_COLOR,
             ownerId: currentUser?.uid || 'unknown',
@@ -473,7 +474,7 @@ function Canvas() {
                     key={shape.id}
                     shape={shape}
                     isSelected={isSelected}
-                    userColor={userProfile?.colorHex || '#000000'}
+                    userColor={userColor}
                     onClick={() => handleShapeClick(shape.id)}
                     onDragStart={() => handleShapeDragStart(shape.id)}
                     onDragMove={(e) => handleShapeDragMove(shape.id, e)}

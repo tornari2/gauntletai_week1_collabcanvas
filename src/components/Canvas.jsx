@@ -1,12 +1,23 @@
 import React, { useRef, useState, useEffect, useCallback, memo } from 'react'
-import { Stage, Layer, Rect } from 'react-konva'
+import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CANVAS_CONFIG, SHAPE_DEFAULTS } from '../utils/constants'
+import { CANVAS_CONFIG, SHAPE_DEFAULTS, SYNC_CONFIG } from '../utils/constants'
 import { useCanvas } from '../context/CanvasContext'
 import { useAuth } from '../context/AuthContext'
 
 // Memoized Rectangle component for performance
-const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
+const Rectangle = memo(({ 
+  shape, 
+  isSelected, 
+  userColor, 
+  onClick, 
+  onDragStart, 
+  onDragMove, 
+  onDragEnd,
+  onTransformStart,
+  onTransformEnd,
+  shapeRef 
+}) => {
   const handleClick = (e) => {
     e.cancelBubble = true // Prevent event from bubbling to stage
     onClick(e)
@@ -14,6 +25,7 @@ const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
 
   return (
     <Rect
+      ref={shapeRef}
       x={shape.x}
       y={shape.y}
       width={shape.width}
@@ -22,8 +34,14 @@ const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
       stroke={isSelected ? userColor : shape.borderColor}
       strokeWidth={isSelected ? SHAPE_DEFAULTS.SELECTION_STROKE_WIDTH : SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
       listening={true}
+      draggable={true}
       onClick={handleClick}
       onTap={handleClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+      onTransformStart={onTransformStart}
+      onTransformEnd={onTransformEnd}
       onMouseEnter={(e) => {
         const stage = e.target.getStage()
         if (stage) {
@@ -44,13 +62,15 @@ const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
 function Canvas() {
   const containerRef = useRef(null)
   const stageRef = useRef(null)
+  const transformerRef = useRef(null)
+  const selectedShapeRef = useRef(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
   const isPanning = useRef(false)
   
   // Canvas context and auth
-  const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape, deleteShape } = useCanvas()
+  const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape, deleteShape, updateShape } = useCanvas()
   const { currentUser, userProfile } = useAuth()
   
   // Rectangle creation state
@@ -58,6 +78,12 @@ function Canvas() {
   const [startPos, setStartPos] = useState(null)
   const [previewRect, setPreviewRect] = useState(null)
   const previewUpdateTimer = useRef(null)
+  
+  // Drag/transform throttling
+  const dragUpdateTimer = useRef(null)
+  const transformUpdateTimer = useRef(null)
+  const isDragging = useRef(false)
+  const isTransforming = useRef(false)
 
 
   // Calculate canvas dimensions on mount and resize
@@ -140,6 +166,105 @@ function Canvas() {
     }
   }, [creatingRectangle])
 
+  // Attach transformer to selected shape
+  useEffect(() => {
+    const transformer = transformerRef.current
+    const selectedNode = selectedShapeRef.current
+    
+    if (transformer && selectedShapeId && selectedNode) {
+      // Attach transformer to the selected shape
+      transformer.nodes([selectedNode])
+      transformer.getLayer().batchDraw()
+    } else if (transformer) {
+      // Detach transformer if no selection
+      transformer.nodes([])
+      transformer.getLayer().batchDraw()
+    }
+  }, [selectedShapeId])
+
+  // Drag handlers for shapes
+  const handleShapeDragStart = useCallback((shapeId) => {
+    isDragging.current = true
+    // Select the shape being dragged
+    selectShape(shapeId)
+    // Disable panning while dragging shape
+    isPanning.current = false
+  }, [selectShape])
+
+  const handleShapeDragMove = useCallback((shapeId, e) => {
+    if (!isDragging.current) return
+    
+    // Throttle updates to avoid overwhelming the system
+    if (dragUpdateTimer.current) {
+      clearTimeout(dragUpdateTimer.current)
+    }
+    
+    dragUpdateTimer.current = setTimeout(() => {
+      const node = e.target
+      updateShape(shapeId, {
+        x: node.x(),
+        y: node.y(),
+        updatedAt: Date.now(),
+        lastModifiedBy: currentUser?.uid || 'unknown'
+      })
+    }, SYNC_CONFIG.SHAPE_UPDATE_THROTTLE_MS)
+  }, [updateShape, currentUser])
+
+  const handleShapeDragEnd = useCallback((shapeId, e) => {
+    isDragging.current = false
+    
+    // Clear any pending throttled update
+    if (dragUpdateTimer.current) {
+      clearTimeout(dragUpdateTimer.current)
+    }
+    
+    // Final update with exact position
+    const node = e.target
+    updateShape(shapeId, {
+      x: node.x(),
+      y: node.y(),
+      updatedAt: Date.now(),
+      lastModifiedBy: currentUser?.uid || 'unknown'
+    })
+  }, [updateShape, currentUser])
+
+  // Transform handlers for shapes (resize)
+  const handleShapeTransformStart = useCallback(() => {
+    isTransforming.current = true
+  }, [])
+
+  const handleShapeTransformEnd = useCallback((shapeId, e) => {
+    isTransforming.current = false
+    
+    // Clear any pending throttled update
+    if (transformUpdateTimer.current) {
+      clearTimeout(transformUpdateTimer.current)
+    }
+    
+    // Get the transformed node
+    const node = e.target
+    const scaleX = node.scaleX()
+    const scaleY = node.scaleY()
+    
+    // Calculate new dimensions based on scale
+    const newWidth = Math.max(SHAPE_DEFAULTS.MIN_SHAPE_SIZE, node.width() * scaleX)
+    const newHeight = Math.max(SHAPE_DEFAULTS.MIN_SHAPE_SIZE, node.height() * scaleY)
+    
+    // Reset scale to 1 after applying to width/height
+    node.scaleX(1)
+    node.scaleY(1)
+    
+    // Update shape with new dimensions
+    updateShape(shapeId, {
+      x: node.x(),
+      y: node.y(),
+      width: newWidth,
+      height: newHeight,
+      updatedAt: Date.now(),
+      lastModifiedBy: currentUser?.uid || 'unknown'
+    })
+  }, [updateShape, currentUser])
+
   // Pan functionality: Enable dragging the entire stage
   const handleMouseDown = useCallback((e) => {
     const stage = stageRef.current
@@ -162,8 +287,14 @@ function Canvas() {
       return
     }
     
-    // Otherwise, start panning on left click or middle click
-    if (e.evt.button === 0 || e.evt.button === 1) {
+    // Don't start panning if we're dragging a shape or transforming
+    if (isDragging.current || isTransforming.current) {
+      return
+    }
+    
+    // Start panning on left click or middle click (only on empty canvas)
+    const clickedOnEmpty = e.target === stage
+    if (clickedOnEmpty && (e.evt.button === 0 || e.evt.button === 1)) {
       isPanning.current = true
     }
   }, [creatingRectangle])
@@ -332,18 +463,37 @@ function Canvas() {
             {/* Render all shapes */}
             {shapes.map((shape) => {
               if (shape.type === 'rectangle') {
+                const isSelected = shape.id === selectedShapeId
                 return (
                   <Rectangle
                     key={shape.id}
                     shape={shape}
-                    isSelected={shape.id === selectedShapeId}
+                    isSelected={isSelected}
                     userColor={userProfile?.colorHex || '#000000'}
                     onClick={() => handleShapeClick(shape.id)}
+                    onDragStart={() => handleShapeDragStart(shape.id)}
+                    onDragMove={(e) => handleShapeDragMove(shape.id, e)}
+                    onDragEnd={(e) => handleShapeDragEnd(shape.id, e)}
+                    onTransformStart={() => handleShapeTransformStart()}
+                    onTransformEnd={(e) => handleShapeTransformEnd(shape.id, e)}
+                    shapeRef={isSelected ? selectedShapeRef : null}
                   />
                 )
               }
               return null
             })}
+            
+            {/* Transformer for resizing selected shape */}
+            <Transformer
+              ref={transformerRef}
+              boundBoxFunc={(oldBox, newBox) => {
+                // Enforce minimum size during transform
+                if (newBox.width < SHAPE_DEFAULTS.MIN_SHAPE_SIZE || newBox.height < SHAPE_DEFAULTS.MIN_SHAPE_SIZE) {
+                  return oldBox
+                }
+                return newBox
+              }}
+            />
             
             {/* Preview rectangle while drawing */}
             {previewRect && (

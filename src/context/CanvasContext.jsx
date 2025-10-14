@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useShapeSync } from '../hooks/useShapeSync';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../utils/firebase';
+import { COLLECTIONS, GLOBAL_CANVAS_ID } from '../utils/constants';
 import { useAuth } from './AuthContext';
 
 const CanvasContext = createContext();
@@ -18,8 +20,37 @@ export function CanvasProvider({ children }) {
   const [creatingRectangle, setCreatingRectangle] = useState(false);
   const { currentUser } = useAuth();
   
-  // Get Firebase sync functions from useShapeSync hook
-  const { createShape: createShapeInFirestore, updateShapeInFirestore, deleteShapeFromFirestore } = useShapeSync();
+  // Set up Firestore listener for real-time shape updates
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const shapesRef = collection(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES);
+    
+    const unsubscribe = onSnapshot(
+      shapesRef,
+      (snapshot) => {
+        const shapes = [];
+        snapshot.forEach((doc) => {
+          shapes.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Sort by creation time for consistent ordering
+        shapes.sort((a, b) => {
+          const aTime = a.createdAt?.seconds || 0;
+          const bTime = b.createdAt?.seconds || 0;
+          return aTime - bTime;
+        });
+        
+        setShapes(shapes);
+      },
+      (error) => {
+        console.error('Error listening to shapes:', error);
+      }
+    );
+
+    // Cleanup listener on unmount
+    return () => unsubscribe();
+  }, [currentUser]);
 
   // Add a new shape to the canvas (with Firebase sync)
   async function addShape(shape) {
@@ -30,7 +61,14 @@ export function CanvasProvider({ children }) {
       setShapes((prevShapes) => [...prevShapes, shape]);
       
       // Sync to Firebase in background
-      await createShapeInFirestore(shape);
+      const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shape.id);
+      await setDoc(shapeRef, {
+        ...shape,
+        ownerId: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastModifiedBy: currentUser.uid,
+      });
     } catch (error) {
       console.error('Error adding shape:', error);
       // Revert optimistic update on error
@@ -51,7 +89,12 @@ export function CanvasProvider({ children }) {
       );
       
       // Sync to Firebase in background
-      await updateShapeInFirestore(shapeId, updates);
+      const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+      await updateDoc(shapeRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+        lastModifiedBy: currentUser.uid,
+      });
     } catch (error) {
       console.error('Error updating shape:', error);
       // Note: Firestore listener will correct the state if sync fails
@@ -72,7 +115,8 @@ export function CanvasProvider({ children }) {
       }
       
       // Sync to Firebase in background
-      await deleteShapeFromFirestore(shapeId);
+      const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+      await deleteDoc(shapeRef);
     } catch (error) {
       console.error('Error deleting shape:', error);
       // Note: Firestore listener will correct the state if sync fails
@@ -84,11 +128,6 @@ export function CanvasProvider({ children }) {
     setSelectedShapeId(shapeId);
   }
 
-  // Set all shapes at once (used by Firestore listener)
-  function setAllShapes(newShapes) {
-    setShapes(newShapes);
-  }
-
   const value = {
     shapes,
     selectedShapeId,
@@ -98,7 +137,6 @@ export function CanvasProvider({ children }) {
     updateShape,
     deleteShape,
     selectShape,
-    setAllShapes,
   };
 
   return (

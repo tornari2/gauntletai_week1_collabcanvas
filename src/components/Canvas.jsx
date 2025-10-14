@@ -120,8 +120,12 @@ function Canvas() {
     const container = containerRef.current
     if (!container) return
 
-    // Prevent context menu on right click
+    // Prevent context menu on right click (but allow with Cmd/Ctrl for inspect element)
     const preventContextMenu = (e) => {
+      // Allow context menu when holding Cmd (Mac) or Ctrl (Windows/Linux) for inspect element
+      if (e.metaKey || e.ctrlKey) {
+        return
+      }
       e.preventDefault()
     }
 

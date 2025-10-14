@@ -90,11 +90,11 @@ export function AuthProvider({ children }) {
     try {
       setError(null);
       
-      // Remove user from presence collection (will implement in PR 11)
+      // Remove user from presence collection
       if (currentUser) {
-        // TODO: Remove from presence collection
-        // const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
-        // await deleteDoc(presenceRef);
+        const { deleteDoc, doc } = await import('firebase/firestore');
+        const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
+        await deleteDoc(presenceRef);
       }
 
       await signOut(auth);

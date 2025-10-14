@@ -46,7 +46,7 @@ function Canvas() {
   
   // Canvas context and auth
   const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape } = useCanvas()
-  const { currentUser } = useAuth()
+  const { currentUser, userProfile } = useAuth()
   
   // Rectangle creation state
   const [isDrawing, setIsDrawing] = useState(false)
@@ -300,7 +300,7 @@ function Canvas() {
                     key={shape.id}
                     shape={shape}
                     isSelected={shape.id === selectedShapeId}
-                    userColor={currentUser?.colorHex || '#000000'}
+                    userColor={userProfile?.colorHex || '#000000'}
                     onClick={() => handleShapeClick(shape.id)}
                   />
                 )

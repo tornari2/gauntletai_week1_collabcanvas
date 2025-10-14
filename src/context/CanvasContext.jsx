@@ -13,6 +13,7 @@ export function useCanvas() {
 export function CanvasProvider({ children }) {
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
+  const [creatingRectangle, setCreatingRectangle] = useState(false);
 
   // Add a new shape to the canvas
   function addShape(shape) {
@@ -51,6 +52,8 @@ export function CanvasProvider({ children }) {
   const value = {
     shapes,
     selectedShapeId,
+    creatingRectangle,
+    setCreatingRectangle,
     addShape,
     updateShape,
     deleteShape,

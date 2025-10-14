@@ -5,6 +5,7 @@ import { PresenceProvider } from './context/PresenceContext'
 import { usePresenceManager } from './hooks/usePresence'
 import LoginModal from './components/LoginModal'
 import Canvas from './components/Canvas'
+import Toolbar from './components/Toolbar'
 import './App.css'
 
 function AppContent() {
@@ -51,6 +52,7 @@ function AppContent() {
   return (
     <div className="app authenticated">
       <Canvas />
+      <Toolbar />
     </div>
   )
 }

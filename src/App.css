@@ -90,6 +90,41 @@ p {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  gap: 10px;
+}
+
+.toolbar-button {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: #ffffff;
+  border: 2px solid #333;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #333;
+}
+
+.toolbar-button:hover {
+  background-color: #f0f0f0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-button:active {
+  transform: translateY(0);
+}
+
+.toolbar-button.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+}
+
+.toolbar-button.active:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
 }
 
 /* User List will be positioned at top-right */

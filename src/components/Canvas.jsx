@@ -1,6 +1,26 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { Stage, Layer } from 'react-konva'
-import { CANVAS_CONFIG } from '../utils/constants'
+import React, { useRef, useState, useEffect, useCallback, memo } from 'react'
+import { Stage, Layer, Rect } from 'react-konva'
+import { v4 as uuidv4 } from 'uuid'
+import { CANVAS_CONFIG, SHAPE_DEFAULTS } from '../utils/constants'
+import { useCanvas } from '../context/CanvasContext'
+import { useAuth } from '../context/AuthContext'
+
+// Memoized Rectangle component for performance
+const Rectangle = memo(({ shape }) => {
+  return (
+    <Rect
+      x={shape.x}
+      y={shape.y}
+      width={shape.width}
+      height={shape.height}
+      fill={shape.fillColor}
+      stroke={shape.borderColor}
+      strokeWidth={SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
+      listening={false}
+      perfectDrawEnabled={false}
+    />
+  )
+})
 
 function Canvas() {
   const containerRef = useRef(null)
@@ -9,6 +29,16 @@ function Canvas() {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
   const isPanning = useRef(false)
+  
+  // Canvas context and auth
+  const { shapes, creatingRectangle, setCreatingRectangle, addShape } = useCanvas()
+  const { currentUser } = useAuth()
+  
+  // Rectangle creation state
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [startPos, setStartPos] = useState(null)
+  const [previewRect, setPreviewRect] = useState(null)
+  const previewUpdateTimer = useRef(null)
 
 
   // Calculate canvas dimensions on mount and resize
@@ -66,29 +96,115 @@ function Canvas() {
 
   // Pan functionality: Enable dragging the entire stage
   const handleMouseDown = useCallback((e) => {
-    // Start panning on left click or middle click
+    const stage = stageRef.current
+    if (!stage) return
+
+    // If creating rectangle mode, start drawing
+    if (creatingRectangle && e.evt.button === 0) {
+      const pos = stage.getPointerPosition()
+      if (!pos) return
+      
+      // Convert to canvas coordinates
+      const canvasPos = {
+        x: (pos.x - stage.x()) / stage.scaleX(),
+        y: (pos.y - stage.y()) / stage.scaleY()
+      }
+      
+      setIsDrawing(true)
+      setStartPos(canvasPos)
+      setPreviewRect(null)
+      return
+    }
+    
+    // Otherwise, start panning on left click or middle click
     if (e.evt.button === 0 || e.evt.button === 1) {
       isPanning.current = true
     }
-  }, [])
+  }, [creatingRectangle])
 
   const handleMouseUp = useCallback(() => {
+    const stage = stageRef.current
+    
+    // If we were drawing a rectangle, create it
+    if (isDrawing && startPos && stage) {
+      const pos = stage.getPointerPosition()
+      if (pos) {
+        const canvasPos = {
+          x: (pos.x - stage.x()) / stage.scaleX(),
+          y: (pos.y - stage.y()) / stage.scaleY()
+        }
+        
+        // Calculate dimensions
+        const width = Math.abs(canvasPos.x - startPos.x)
+        const height = Math.abs(canvasPos.y - startPos.y)
+        
+        // Only create if minimum size
+        if (width >= SHAPE_DEFAULTS.MIN_SHAPE_SIZE && height >= SHAPE_DEFAULTS.MIN_SHAPE_SIZE) {
+          const rectangle = {
+            id: uuidv4(),
+            type: 'rectangle',
+            x: Math.min(startPos.x, canvasPos.x),
+            y: Math.min(startPos.y, canvasPos.y),
+            width,
+            height,
+            fillColor: SHAPE_DEFAULTS.DEFAULT_FILL_COLOR,
+            borderColor: SHAPE_DEFAULTS.DEFAULT_STROKE_COLOR,
+            ownerId: currentUser?.uid || 'unknown',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            lastModifiedBy: currentUser?.uid || 'unknown'
+          }
+          
+          addShape(rectangle)
+        }
+      }
+      
+      // Reset drawing state and exit creation mode
+      setIsDrawing(false)
+      setStartPos(null)
+      setPreviewRect(null)
+      setCreatingRectangle(false)
+    }
+    
     isPanning.current = false
-  }, [])
+  }, [isDrawing, startPos, addShape, currentUser, setCreatingRectangle])
 
   const handleMouseMove = useCallback((e) => {
-    if (!isPanning.current) return
-    
-    // Update stage position based on mouse movement
     const stage = stageRef.current
-    if (stage) {
-      const newPos = {
-        x: stage.x() + e.evt.movementX,
-        y: stage.y() + e.evt.movementY
+    if (!stage) return
+    
+    // If drawing rectangle, update preview (throttled with RAF)
+    if (isDrawing && startPos) {
+      if (previewUpdateTimer.current) {
+        cancelAnimationFrame(previewUpdateTimer.current)
       }
-      setStagePos(newPos)
+      
+      previewUpdateTimer.current = requestAnimationFrame(() => {
+        const pos = stage.getPointerPosition()
+        if (pos) {
+          const canvasPos = {
+            x: (pos.x - stage.x()) / stage.scaleX(),
+            y: (pos.y - stage.y()) / stage.scaleY()
+          }
+          
+          setPreviewRect({
+            x: Math.min(startPos.x, canvasPos.x),
+            y: Math.min(startPos.y, canvasPos.y),
+            width: Math.abs(canvasPos.x - startPos.x),
+            height: Math.abs(canvasPos.y - startPos.y)
+          })
+        }
+      })
+      return
     }
-  }, [])
+    
+    // Panning: directly update stage position without React state
+    if (isPanning.current) {
+      stage.x(stage.x() + e.evt.movementX)
+      stage.y(stage.y() + e.evt.movementY)
+      stage.batchDraw()
+    }
+  }, [isDrawing, startPos])
 
   // Zoom functionality: Mouse wheel zooms toward cursor position
   const handleWheel = useCallback((e) => {
@@ -123,8 +239,12 @@ function Canvas() {
       y: pointer.y - mousePointTo.y * newScale
     }
 
-    setStageScale(newScale)
-    setStagePos(newPos)
+    // Directly update stage properties without React state
+    stage.scaleX(newScale)
+    stage.scaleY(newScale)
+    stage.x(newPos.x)
+    stage.y(newPos.y)
+    stage.batchDraw()
   }, [])
 
   return (
@@ -134,10 +254,6 @@ function Canvas() {
           ref={stageRef}
           width={dimensions.width}
           height={dimensions.height}
-          x={stagePos.x}
-          y={stagePos.y}
-          scaleX={stageScale}
-          scaleY={stageScale}
           draggable={false}
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
@@ -146,7 +262,30 @@ function Canvas() {
           style={{ backgroundColor: '#ffffff' }}
         >
           <Layer>
-            {/* Shapes will be rendered here in future PRs */}
+            {/* Render all shapes */}
+            {shapes.map((shape) => {
+              if (shape.type === 'rectangle') {
+                return <Rectangle key={shape.id} shape={shape} />
+              }
+              return null
+            })}
+            
+            {/* Preview rectangle while drawing */}
+            {previewRect && (
+              <Rect
+                x={previewRect.x}
+                y={previewRect.y}
+                width={previewRect.width}
+                height={previewRect.height}
+                fill={SHAPE_DEFAULTS.DEFAULT_FILL_COLOR}
+                stroke={SHAPE_DEFAULTS.DEFAULT_STROKE_COLOR}
+                strokeWidth={SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
+                dash={[5, 5]}
+                opacity={0.7}
+                listening={false}
+                perfectDrawEnabled={false}
+              />
+            )}
           </Layer>
         </Stage>
       ) : (

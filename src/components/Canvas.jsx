@@ -7,6 +7,11 @@ import { useAuth } from '../context/AuthContext'
 
 // Memoized Rectangle component for performance
 const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
+  const handleClick = (e) => {
+    e.cancelBubble = true // Prevent event from bubbling to stage
+    onClick(e)
+  }
+
   return (
     <Rect
       x={shape.x}
@@ -17,8 +22,8 @@ const Rectangle = memo(({ shape, isSelected, userColor, onClick }) => {
       stroke={isSelected ? userColor : shape.borderColor}
       strokeWidth={isSelected ? SHAPE_DEFAULTS.SELECTION_STROKE_WIDTH : SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH}
       listening={true}
-      onClick={onClick}
-      onTap={onClick}
+      onClick={handleClick}
+      onTap={handleClick}
       onMouseEnter={(e) => {
         const stage = e.target.getStage()
         if (stage) {

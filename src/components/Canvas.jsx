@@ -131,6 +131,15 @@ function Canvas() {
     }
   }, [selectedShapeId, deleteShape])
 
+  // Clear preview rectangle when creation mode is turned off
+  useEffect(() => {
+    if (!creatingRectangle) {
+      setIsDrawing(false)
+      setStartPos(null)
+      setPreviewRect(null)
+    }
+  }, [creatingRectangle])
+
   // Pan functionality: Enable dragging the entire stage
   const handleMouseDown = useCallback((e) => {
     const stage = stageRef.current
@@ -286,6 +295,11 @@ function Canvas() {
 
   // Handle shape click for selection
   const handleShapeClick = useCallback((shapeId) => {
+    // Clear any drawing state
+    setIsDrawing(false)
+    setStartPos(null)
+    setPreviewRect(null)
+    // Select the shape
     selectShape(shapeId)
   }, [selectShape])
 

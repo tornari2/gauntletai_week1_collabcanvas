@@ -6,6 +6,7 @@ import { usePresenceManager } from './hooks/usePresence'
 import LoginModal from './components/LoginModal'
 import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
+import UserList from './components/UserList'
 import './App.css'
 
 function AppContent() {
@@ -53,6 +54,7 @@ function AppContent() {
     <div className="app authenticated">
       <Canvas />
       <Toolbar />
+      <UserList />
     </div>
   )
 }

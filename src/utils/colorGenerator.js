@@ -1,6 +1,7 @@
 /**
  * Generates a consistent, deterministic color from a username
- * Uses a simple hash function to convert username to hue value
+ * Uses an improved hash function to convert username to hue value
+ * Better distribution for similar strings (student1, student2, etc.)
  * 
  * @param {string} username - The username to generate a color for
  * @returns {string} - HSL color string (e.g., "hsl(120, 70%, 60%)")
@@ -10,18 +11,26 @@ export function generateColorFromUsername(username) {
     return 'hsl(0, 70%, 60%)'; // Default red
   }
 
-  // Simple hash function to convert string to number
-  let hash = 0;
+  // Improved hash function with better distribution
+  // Using DJB2 hash algorithm for better spread
+  let hash = 5381;
   for (let i = 0; i < username.length; i++) {
-    hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    hash = hash & hash; // Convert to 32-bit integer
+    hash = ((hash << 5) + hash) + username.charCodeAt(i); // hash * 33 + char
   }
+  
+  // Add additional mixing for better distribution
+  hash = Math.abs(hash);
+  hash = ((hash >> 16) ^ hash) * 0x45d9f3b;
+  hash = ((hash >> 16) ^ hash) * 0x45d9f3b;
+  hash = (hash >> 16) ^ hash;
 
   // Convert hash to hue value (0-360)
-  const hue = Math.abs(hash % 360);
+  // Skip yellow range (40-70) as it's hard to see on white backgrounds
+  const hue = hash % 330; // Use 330 instead of 360 to skip some yellows
+  const adjustedHue = hue < 40 ? hue : hue + 30; // Skip 40-70 range
 
   // Return HSL color with good saturation and lightness for visibility
-  return `hsl(${hue}, 70%, 60%)`;
+  return `hsl(${adjustedHue}, 70%, 60%)`;
 }
 
 /**

@@ -45,7 +45,7 @@ function Canvas() {
   const isPanning = useRef(false)
   
   // Canvas context and auth
-  const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape } = useCanvas()
+  const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape, deleteShape } = useCanvas()
   const { currentUser, userProfile } = useAuth()
   
   // Rectangle creation state
@@ -107,6 +107,24 @@ function Canvas() {
       container.removeEventListener('wheel', preventDefaultWheel)
     }
   }, [])
+
+  // Handle keyboard events for shape deletion
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Delete or Backspace key
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeId) {
+        e.preventDefault() // Prevent default browser back navigation on Backspace
+        deleteShape(selectedShapeId)
+      }
+    }
+
+    // Attach to document so it works when canvas is focused
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedShapeId, deleteShape])
 
   // Pan functionality: Enable dragging the entire stage
   const handleMouseDown = useCallback((e) => {

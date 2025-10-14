@@ -4,7 +4,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { CANVAS_CONFIG, SHAPE_DEFAULTS, SYNC_CONFIG } from '../utils/constants'
 import { useCanvas } from '../context/CanvasContext'
 import { useAuth } from '../context/AuthContext'
+import { usePresence } from '../context/PresenceContext'
+import { useCursorSync } from '../hooks/useCursorSync'
 import { getUserColorHex } from '../utils/colorGenerator'
+import Cursor from './Cursor'
 
 // Memoized Rectangle component for performance
 const Rectangle = memo(({ 
@@ -74,6 +77,10 @@ function Canvas() {
   // Canvas context and auth
   const { shapes, selectedShapeId, creatingRectangle, setCreatingRectangle, addShape, selectShape, deleteShape, updateShape } = useCanvas()
   const { currentUser, userProfile } = useAuth()
+  
+  // Presence and cursor tracking
+  const { cursors } = usePresence()
+  const { syncCursorPosition } = useCursorSync()
   
   // Get user color with fallback to generated color based on email
   const userColor = userProfile?.colorHex || 
@@ -158,6 +165,28 @@ function Canvas() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [selectedShapeId, deleteShape])
+
+  // Track cursor position and sync to Firestore
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !currentUser) return
+
+    const handleMouseMove = (e) => {
+      // Get mouse position relative to viewport
+      const rect = container.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+
+      // Sync cursor position (throttled in useCursorSync)
+      syncCursorPosition(x, y)
+    }
+
+    container.addEventListener('mousemove', handleMouseMove)
+
+    return () => {
+      container.removeEventListener('mousemove', handleMouseMove)
+    }
+  }, [currentUser, syncCursorPosition])
 
   // Clear preview rectangle when creation mode is turned off
   useEffect(() => {
@@ -530,6 +559,22 @@ function Canvas() {
           Initializing canvas...
         </div>
       )}
+      
+      {/* Render remote cursors (exclude current user) */}
+      {Object.entries(cursors).map(([userId, cursor]) => {
+        // Don't render current user's cursor
+        if (userId === currentUser?.uid) return null
+        
+        return (
+          <Cursor
+            key={userId}
+            x={cursor.x}
+            y={cursor.y}
+            displayName={cursor.displayName}
+            colorHex={cursor.colorHex}
+          />
+        )
+      })}
     </div>
   )
 }

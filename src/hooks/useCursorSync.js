@@ -3,35 +3,55 @@ import { usePresenceManager } from './usePresence';
 import { SYNC_CONFIG } from '../utils/constants';
 
 /**
- * Custom hook to handle cursor position synchronization with throttling
- * Throttles cursor updates to avoid overwhelming Firestore
+ * Custom hook to sync cursor position to Firestore with throttling
+ * Prevents overwhelming Firestore with too many updates
  */
 export function useCursorSync() {
   const { updateCursorPosition } = usePresenceManager();
-  const throttleTimerRef = useRef(null);
-  const lastUpdateRef = useRef({ x: 0, y: 0 });
+  const lastUpdateTime = useRef(0);
+  const pendingUpdate = useRef(null);
+  const timeoutId = useRef(null);
 
-  // Throttled cursor update function
-  const updateCursor = useCallback((x, y) => {
-    // Store the latest cursor position
-    lastUpdateRef.current = { x, y };
+  /**
+   * Throttled cursor position update
+   * Updates immediately if enough time has passed, otherwise schedules update
+   */
+  const syncCursorPosition = useCallback((x, y) => {
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateTime.current;
 
-    // If there's no pending update, schedule one
-    if (!throttleTimerRef.current) {
-      throttleTimerRef.current = setTimeout(() => {
-        const { x: latestX, y: latestY } = lastUpdateRef.current;
+    // If enough time has passed, update immediately
+    if (timeSinceLastUpdate >= SYNC_CONFIG.CURSOR_THROTTLE_MS) {
+      lastUpdateTime.current = now;
+      updateCursorPosition(x, y);
+      
+      // Clear any pending update
+      if (timeoutId.current) {
+        clearTimeout(timeoutId.current);
+        timeoutId.current = null;
+      }
+      pendingUpdate.current = null;
+    } else {
+      // Store pending update
+      pendingUpdate.current = { x, y };
+      
+      // Schedule update if not already scheduled
+      if (!timeoutId.current) {
+        const delay = SYNC_CONFIG.CURSOR_THROTTLE_MS - timeSinceLastUpdate;
         
-        // Update cursor position in Firestore
-        updateCursorPosition(latestX, latestY);
-        
-        // Clear the timer
-        throttleTimerRef.current = null;
-      }, SYNC_CONFIG.CURSOR_THROTTLE_MS);
+        timeoutId.current = setTimeout(() => {
+          if (pendingUpdate.current) {
+            lastUpdateTime.current = Date.now();
+            updateCursorPosition(pendingUpdate.current.x, pendingUpdate.current.y);
+            pendingUpdate.current = null;
+          }
+          timeoutId.current = null;
+        }, delay);
+      }
     }
   }, [updateCursorPosition]);
 
   return {
-    updateCursor,
+    syncCursorPosition,
   };
 }
-

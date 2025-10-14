@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const PresenceContext = createContext();
 
@@ -15,7 +15,7 @@ export function PresenceProvider({ children }) {
   const [cursors, setCursors] = useState({});
 
   // Set user as online
-  function setUserOnline(userId, userData) {
+  const setUserOnline = useCallback((userId, userData) => {
     setOnlineUsers((prevUsers) => {
       const existingUserIndex = prevUsers.findIndex((user) => user.userId === userId);
       
@@ -29,10 +29,10 @@ export function PresenceProvider({ children }) {
         return [...prevUsers, { userId, ...userData }];
       }
     });
-  }
+  }, []);
 
   // Set user as offline (remove from list)
-  function setUserOffline(userId) {
+  const setUserOffline = useCallback((userId) => {
     setOnlineUsers((prevUsers) => prevUsers.filter((user) => user.userId !== userId));
     
     // Also remove their cursor
@@ -41,27 +41,27 @@ export function PresenceProvider({ children }) {
       delete newCursors[userId];
       return newCursors;
     });
-  }
+  }, []);
 
   // Update cursor position for a user
-  function updateCursor(userId, cursorData) {
+  const updateCursor = useCallback((userId, cursorData) => {
     setCursors((prevCursors) => ({
       ...prevCursors,
       [userId]: cursorData,
     }));
-  }
+  }, []);
 
   // Set all online users at once (used for initial load from Firestore)
-  function setAllOnlineUsers(users) {
+  const setAllOnlineUsers = useCallback((users) => {
     setOnlineUsers(users);
-  }
+  }, []);
 
   // Set all cursors at once
-  function setAllCursors(cursorsData) {
+  const setAllCursors = useCallback((cursorsData) => {
     setCursors(cursorsData);
-  }
+  }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     onlineUsers,
     cursors,
     setUserOnline,
@@ -69,7 +69,7 @@ export function PresenceProvider({ children }) {
     updateCursor,
     setAllOnlineUsers,
     setAllCursors,
-  };
+  }), [onlineUsers, cursors, setUserOnline, setUserOffline, updateCursor, setAllOnlineUsers, setAllCursors]);
 
   return (
     <PresenceContext.Provider value={value}>

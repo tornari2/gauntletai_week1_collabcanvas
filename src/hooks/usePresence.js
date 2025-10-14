@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../utils/firebase';
 import { COLLECTIONS } from '../utils/constants';
 import { usePresence } from '../context/PresenceContext';
 import { useAuth } from '../context/AuthContext';
+import { getUserColorHex } from '../utils/colorGenerator';
 
 /**
  * Custom hook to manage user presence in Firestore
@@ -27,6 +28,7 @@ export function usePresenceManager() {
         
         snapshot.forEach((doc) => {
           const data = doc.data();
+          
           users.push({
             userId: doc.id,
             displayName: data.displayName,
@@ -56,19 +58,28 @@ export function usePresenceManager() {
 
     // Cleanup listener on unmount
     return () => unsubscribe();
-  }, [currentUser, setAllOnlineUsers, setAllCursors]);
+  }, [currentUser]);
 
   // Function to set user as online in Firestore
-  async function setUserPresence() {
+  const setUserPresence = useCallback(async () => {
     if (!currentUser || !userProfile) return;
 
     try {
       const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
       
+      // Use userProfile colorHex, or generate from email as fallback
+      const colorHex = userProfile.colorHex || 
+        (currentUser.email ? getUserColorHex(currentUser.email) : '#000000');
+      
+      // Use displayName from userProfile, or email prefix as fallback
+      const displayName = userProfile.displayName || 
+        currentUser.email?.split('@')[0] || 
+        'Anonymous';
+      
       await setDoc(presenceRef, {
         userId: currentUser.uid,
-        displayName: userProfile.displayName,
-        colorHex: userProfile.colorHex,
+        displayName: displayName,
+        colorHex: colorHex,
         cursorX: 0,
         cursorY: 0,
         lastActive: serverTimestamp(),
@@ -77,10 +88,10 @@ export function usePresenceManager() {
     } catch (error) {
       console.error('Error setting user presence:', error);
     }
-  }
+  }, [currentUser, userProfile]);
 
   // Function to remove user presence from Firestore
-  async function removeUserPresence() {
+  const removeUserPresence = useCallback(async () => {
     if (!currentUser) return;
 
     try {
@@ -89,10 +100,10 @@ export function usePresenceManager() {
     } catch (error) {
       console.error('Error removing user presence:', error);
     }
-  }
+  }, [currentUser]);
 
   // Function to update cursor position in Firestore
-  async function updateCursorPosition(x, y) {
+  const updateCursorPosition = useCallback(async (x, y) => {
     if (!currentUser) return;
 
     try {
@@ -106,7 +117,7 @@ export function usePresenceManager() {
     } catch (error) {
       console.error('Error updating cursor position:', error);
     }
-  }
+  }, [currentUser]);
 
   return {
     setUserPresence,

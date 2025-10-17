@@ -36,7 +36,8 @@ CollabCanvas is a modern, web-based collaborative design tool built with React a
 
 ### Backend & Services
 - **Firebase Authentication** - User authentication
-- **Firebase Firestore** - Real-time database
+- **Firebase Firestore** - Persistent shape data storage
+- **Firebase Realtime Database** - Real-time cursor tracking and presence
 - **Firebase Hosting** - Deployment (optional)
 
 ### Styling
@@ -65,8 +66,10 @@ CollabCanvas is a modern, web-based collaborative design tool built with React a
 3. **Set up Firebase**
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
    - Enable Authentication (Email/Password)
-   - Enable Firestore Database
-   - Copy your Firebase configuration
+   - Enable Firestore Database (for persistent shape data)
+   - Enable Realtime Database (for live cursors & presence)
+     - Start in **test mode** or use the provided `database.rules.json`
+   - Copy your Firebase configuration (including the Realtime Database URL)
 
 4. **Configure environment**
    
@@ -78,14 +81,23 @@ CollabCanvas is a modern, web-based collaborative design tool built with React a
    VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
    VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
    VITE_FIREBASE_APP_ID=your_app_id
+   VITE_FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
    ```
 
-5. **Deploy Firestore Security Rules**
+5. **Deploy Security Rules**
+   
+   Deploy both Firestore and Realtime Database rules:
    ```bash
+   # Deploy Firestore rules
    firebase deploy --only firestore:rules
+   
+   # Deploy Realtime Database rules
+   firebase deploy --only database
    ```
    
-   Or manually copy rules from `firestore.rules` to Firebase Console.
+   Or manually copy rules from:
+   - `firestore.rules` → Firestore Rules in Firebase Console
+   - `database.rules.json` → Realtime Database Rules in Firebase Console
 
 6. **Start the development server**
    ```bash
@@ -146,38 +158,53 @@ gauntletai_week1_collabcanvas/
 │   ├── App.jsx            # Root component
 │   └── index.jsx          # App entry point
 ├── firestore.rules        # Firestore security rules
+├── database.rules.json    # Realtime Database security rules
 ├── vite.config.js        # Vite configuration
 └── package.json          # Dependencies
 ```
 
 ## 🔥 Firebase Setup
 
-### Firestore Collections
+### Architecture: Hybrid Database Approach
 
-**users/**
-- Stores user profiles (displayName, colorHex, etc.)
+This app uses **both** Firestore and Realtime Database for optimal performance:
 
-**presence/**
-- Tracks online users and cursor positions
-- Auto-cleaned on logout/disconnect
+**Firestore (Persistent Data)**
+- **users/** - User profiles (displayName, colorHex, etc.)
+- **canvases/global/shapes/** - All shape data (position, size, rotation, color)
+- Optimized for: Complex queries, offline support, data persistence
 
-**canvases/global/shapes/**
-- Stores all shape data (position, size, rotation, color)
-- Real-time sync across all clients
+**Realtime Database (Ephemeral/Live Data)**
+- **presence/{userId}** - Online users and live cursor positions
+- Optimized for: Real-time updates, automatic cleanup, high-frequency updates (~60fps)
+- Key advantage: Built-in `.onDisconnect()` for automatic presence cleanup
+
+### Why the Hybrid Approach?
+
+- ⚡ **3x Faster Cursors**: RTDB latency ~50-150ms vs Firestore ~200-500ms
+- 🧹 **Auto Cleanup**: RTDB automatically removes users on disconnect
+- 💰 **Cost Efficient**: RTDB cheaper for frequent small updates
+- 🎯 **Best of Both**: Firestore for queryable data, RTDB for real-time features
 
 ### Security Rules
 
-The `firestore.rules` file contains security rules that:
-- Allow authenticated users to read/write their own data
-- Allow all authenticated users to read/write shapes
-- Prevent unauthorized access
+**Firestore Rules** (`firestore.rules`)
+- Authenticated users can read/write shapes
+- Users can read/write their own profiles
+- Prevents unauthorized access
+
+**Realtime Database Rules** (`database.rules.json`)
+- Authenticated users can read all presence data
+- Users can only write their own presence data
+- Validates data structure and types
 
 ## 🎯 Key Features Explained
 
 ### Real-Time Synchronization
 - **Optimistic Updates:** Local changes appear instantly, then sync to Firebase
 - **Conflict Resolution:** Last-write-wins strategy using server timestamps
-- **Throttling:** Cursor updates limited to 50ms intervals (20/sec) for performance
+- **Throttling:** Cursor updates at ~60fps (16ms intervals) via Realtime Database
+- **Dual Database:** Firestore for shapes, RTDB for cursors/presence
 
 ### User Colors
 - Each user gets a unique color based on their display name

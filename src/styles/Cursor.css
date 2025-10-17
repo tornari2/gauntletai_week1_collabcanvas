@@ -1,7 +1,7 @@
 .remote-cursor {
   position: absolute;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 500; /* Z_INDEX.REMOTE_CURSORS */
   transform: translate(-2px, -2px);
   transition: left 0.1s ease-out, top 0.1s ease-out;
 }

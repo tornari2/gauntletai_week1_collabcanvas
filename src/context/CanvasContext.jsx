@@ -17,7 +17,28 @@ export function useCanvas() {
 export function CanvasProvider({ children }) {
   const [shapes, setShapes] = useState([]);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
+  const [selectedShapeIds, setSelectedShapeIds] = useState([]); // For multi-select
   const [creatingRectangle, setCreatingRectangle] = useState(false);
+  const [creatingDiamond, setCreatingDiamond] = useState(false);
+  const [creatingCircle, setCreatingCircle] = useState(false);
+  const [creatingArrow, setCreatingArrow] = useState(false);
+  
+  // Customization settings that persist across shape creation
+  const [fillColor, setFillColor] = useState('#808080'); // Default gray
+  const [fillOpacity, setFillOpacity] = useState(0.5); // Default 50%
+  const [borderThickness, setBorderThickness] = useState(2); // Default 2px
+  const [borderStyle, setBorderStyle] = useState('solid'); // 'solid', 'dashed', or 'dotted'
+  
+  // Text customization settings
+  const [fontSize, setFontSize] = useState('medium'); // 'small', 'medium', 'large'
+  const [fontWeight, setFontWeight] = useState('normal'); // 'normal', 'bold'
+  const [fontStyle, setFontStyle] = useState('normal'); // 'normal', 'italic'
+  const [textDecoration, setTextDecoration] = useState('none'); // 'none', 'underline'
+  const [fontFamily, setFontFamily] = useState('Arial'); // Font family name
+  
+  // Layer customization settings
+  const [defaultLayerPosition, setDefaultLayerPosition] = useState('front'); // 'front' or 'back'
+  
   const { currentUser, loading } = useAuth();
   
   // Set up Firestore listener for real-time shape updates
@@ -34,11 +55,11 @@ export function CanvasProvider({ children }) {
           shapes.push({ id: doc.id, ...doc.data() });
         });
         
-        // Sort by creation time for consistent ordering
+        // Sort by zIndex for consistent ordering (layering)
         shapes.sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return aTime - bTime;
+          const aZ = a.zIndex || a.createdAt?.seconds || 0;
+          const bZ = b.zIndex || b.createdAt?.seconds || 0;
+          return aZ - bZ;
         });
         
         setShapes(shapes);
@@ -70,6 +91,7 @@ export function CanvasProvider({ children }) {
       const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shape.id);
       await setDoc(shapeRef, {
         ...shape,
+        zIndex: shape.zIndex || Date.now(), // Use provided zIndex or timestamp
         ownerId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -134,17 +156,195 @@ export function CanvasProvider({ children }) {
   // Select a shape
   function selectShape(shapeId) {
     setSelectedShapeId(shapeId);
+    setSelectedShapeIds([]); // Clear multi-selection when single selecting
+  }
+  
+  // Select multiple shapes
+  function selectShapes(shapeIds) {
+    setSelectedShapeIds(shapeIds);
+    setSelectedShapeId(null); // Clear single selection when multi-selecting
+  }
+  
+  // Delete multiple shapes
+  async function deleteShapes(shapeIds) {
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
+    
+    try {
+      // Optimistic update: remove from local state immediately
+      setShapes((prevShapes) => prevShapes.filter((shape) => !shapeIds.includes(shape.id)));
+      
+      // Clear selections
+      setSelectedShapeId(null);
+      setSelectedShapeIds([]);
+      
+      // Sync to Firebase in background
+      await Promise.all(
+        shapeIds.map(shapeId => {
+          const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+          return deleteDoc(shapeRef);
+        })
+      );
+    } catch (error) {
+      console.error('Error deleting shapes:', error);
+    }
+  }
+  
+  // Update multiple shapes at once
+  async function updateShapes(shapeIds, updates) {
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
+    
+    try {
+      // Optimistic update
+      setShapes((prevShapes) =>
+        prevShapes.map((shape) =>
+          shapeIds.includes(shape.id) ? { ...shape, ...updates } : shape
+        )
+      );
+      
+      // Sync to Firebase
+      await Promise.all(
+        shapeIds.map(shapeId => {
+          const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+          return updateDoc(shapeRef, {
+            ...updates,
+            updatedAt: serverTimestamp(),
+            lastModifiedBy: user.uid,
+          });
+        })
+      );
+    } catch (error) {
+      console.error('Error updating shapes:', error);
+    }
+  }
+  
+  // Calculate zIndex for new shapes based on defaultLayerPosition
+  function getNewShapeZIndex() {
+    if (defaultLayerPosition === 'front') {
+      // Create on top - use current timestamp
+      return Date.now();
+    } else {
+      // Create at back - find lowest zIndex and subtract
+      const minZIndex = shapes.reduce((min, shape) => {
+        const shapeZ = shape.zIndex || 0;
+        return shapeZ < min ? shapeZ : min;
+      }, Infinity);
+      
+      return (minZIndex === Infinity ? 0 : minZIndex) - 1;
+    }
+  }
+  
+  // Send shape to front (highest zIndex)
+  async function sendToFront(shapeId) {
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
+    
+    try {
+      // Find the highest zIndex among all shapes
+      const maxZIndex = shapes.reduce((max, shape) => {
+        const shapeZ = shape.zIndex || 0;
+        return shapeZ > max ? shapeZ : max;
+      }, 0);
+      
+      // Set this shape's zIndex to max + 1
+      const newZIndex = maxZIndex + 1;
+      
+      // Optimistic update
+      setShapes((prevShapes) =>
+        prevShapes.map((shape) =>
+          shape.id === shapeId ? { ...shape, zIndex: newZIndex } : shape
+        )
+      );
+      
+      // Sync to Firebase
+      const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+      await updateDoc(shapeRef, {
+        zIndex: newZIndex,
+        updatedAt: serverTimestamp(),
+        lastModifiedBy: user.uid,
+      });
+    } catch (error) {
+      console.error('Error sending shape to front:', error);
+    }
+  }
+  
+  // Send shape to back (lowest zIndex)
+  async function sendToBack(shapeId) {
+    const user = currentUser || auth.currentUser;
+    if (!user) return;
+    
+    try {
+      // Find the lowest zIndex among all shapes
+      const minZIndex = shapes.reduce((min, shape) => {
+        const shapeZ = shape.zIndex || 0;
+        return shapeZ < min ? shapeZ : min;
+      }, Infinity);
+      
+      // Set this shape's zIndex to min - 1
+      const newZIndex = (minZIndex === Infinity ? 0 : minZIndex) - 1;
+      
+      // Optimistic update
+      setShapes((prevShapes) =>
+        prevShapes.map((shape) =>
+          shape.id === shapeId ? { ...shape, zIndex: newZIndex } : shape
+        )
+      );
+      
+      // Sync to Firebase
+      const shapeRef = doc(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES, shapeId);
+      await updateDoc(shapeRef, {
+        zIndex: newZIndex,
+        updatedAt: serverTimestamp(),
+        lastModifiedBy: user.uid,
+      });
+    } catch (error) {
+      console.error('Error sending shape to back:', error);
+    }
   }
 
   const value = {
     shapes,
     selectedShapeId,
+    selectedShapeIds,
     creatingRectangle,
     setCreatingRectangle,
+    creatingDiamond,
+    setCreatingDiamond,
+    creatingCircle,
+    setCreatingCircle,
+    creatingArrow,
+    setCreatingArrow,
+    fillColor,
+    setFillColor,
+    fillOpacity,
+    setFillOpacity,
+    borderThickness,
+    setBorderThickness,
+    borderStyle,
+    setBorderStyle,
+    fontSize,
+    setFontSize,
+    fontWeight,
+    setFontWeight,
+    fontStyle,
+    setFontStyle,
+    textDecoration,
+    setTextDecoration,
+    fontFamily,
+    setFontFamily,
+    defaultLayerPosition,
+    setDefaultLayerPosition,
+    getNewShapeZIndex,
     addShape,
     updateShape,
     deleteShape,
     selectShape,
+    selectShapes,
+    deleteShapes,
+    updateShapes,
+    sendToFront,
+    sendToBack,
   };
 
   return (

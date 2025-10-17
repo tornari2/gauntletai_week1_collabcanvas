@@ -7,6 +7,8 @@ import LoginModal from './components/LoginModal'
 import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import UserList from './components/UserList'
+import CustomizationPanel from './components/CustomizationPanel'
+import Legend from './components/Legend'
 import './App.css'
 
 function AppContent() {
@@ -55,6 +57,8 @@ function AppContent() {
       <Canvas />
       <Toolbar />
       <UserList />
+      <CustomizationPanel />
+      <Legend />
     </div>
   )
 }

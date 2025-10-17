@@ -89,12 +89,12 @@ p {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 100; /* Z_INDEX.TOOLBAR */
   gap: 10px;
 }
 
 .toolbar-button {
-  padding: 10px 20px;
+  padding: 12px 16px;
   font-size: 14px;
   font-weight: 500;
   background-color: #ffffff;
@@ -103,6 +103,11 @@ p {
   cursor: pointer;
   transition: all 0.2s ease;
   color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
 }
 
 .toolbar-button:hover {
@@ -127,6 +132,39 @@ p {
   border-color: #0056b3;
 }
 
+.toolbar-separator {
+  width: 1px;
+  height: 30px;
+  background-color: #ddd;
+  margin: 0 10px;
+}
+
+.toolbar-button.clear-canvas-button {
+  background-color: #ffffff;
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.toolbar-button.clear-canvas-button:hover {
+  background-color: #dc3545;
+  border-color: #dc3545;
+  color: #ffffff;
+}
+
+.toolbar-button.clear-canvas-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f8f9fa;
+  border-color: #ddd;
+  color: #999;
+}
+
+.toolbar-button.clear-canvas-button:disabled:hover {
+  background-color: #f8f9fa;
+  transform: none;
+  box-shadow: none;
+}
+
 /* User List will be positioned at top-right */
 .user-list {
   position: fixed;
@@ -138,7 +176,7 @@ p {
   padding: 1rem;
   min-width: 200px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  z-index: 100; /* Z_INDEX.USER_LIST */
 }
 
 /* Canvas will fill remaining space */

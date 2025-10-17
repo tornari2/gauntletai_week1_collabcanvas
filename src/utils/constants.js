@@ -12,7 +12,8 @@ export const CANVAS_CONFIG = {
 // Sync & Performance
 export const SYNC_CONFIG = {
   // Cursor position sync throttle (milliseconds)
-  CURSOR_THROTTLE_MS: 50,
+  // Reduced to ~60fps (16ms) since we're using Realtime Database for faster updates
+  CURSOR_THROTTLE_MS: 16,
   
   // Shape update debounce during drag/resize (milliseconds)
   SHAPE_UPDATE_THROTTLE_MS: 50,
@@ -34,6 +35,13 @@ export const SHAPE_DEFAULTS = {
   
   // Minimum shape size (prevents tiny shapes)
   MIN_SHAPE_SIZE: 10,
+  
+  // Circle default radius
+  MIN_CIRCLE_RADIUS: 5,
+  
+  // Arrow default properties
+  ARROW_POINTER_LENGTH: 10,
+  ARROW_POINTER_WIDTH: 10,
 };
 
 // Firestore Collections

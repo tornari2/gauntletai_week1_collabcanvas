@@ -1,0 +1,33 @@
+{
+  "rules": {
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "$userId === auth.uid",
+        ".validate": "newData.hasChildren(['userId', 'displayName', 'colorHex', 'cursorX', 'cursorY', 'lastActive', 'onlineStatus'])",
+        "userId": {
+          ".validate": "newData.val() === auth.uid"
+        },
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100"
+        },
+        "colorHex": {
+          ".validate": "newData.isString() && newData.val().matches(/^#[0-9A-Fa-f]{6}$/)"
+        },
+        "cursorX": {
+          ".validate": "newData.isNumber()"
+        },
+        "cursorY": {
+          ".validate": "newData.isNumber()"
+        },
+        "lastActive": {
+          ".validate": "newData.isNumber() || newData.val() === null"
+        },
+        "onlineStatus": {
+          ".validate": "newData.isString() && (newData.val() === 'online' || newData.val() === 'offline')"
+        }
+      }
+    }
+  }
+}
+

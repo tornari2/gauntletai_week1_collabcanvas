@@ -3,8 +3,8 @@ import { usePresenceManager } from './usePresence';
 import { SYNC_CONFIG } from '../utils/constants';
 
 /**
- * Custom hook to sync cursor position to Firestore with throttling
- * Prevents overwhelming Firestore with too many updates
+ * Custom hook to sync cursor position to Realtime Database with throttling
+ * Prevents overwhelming the database with too many updates (~60fps)
  */
 export function useCursorSync() {
   const { updateCursorPosition } = usePresenceManager();

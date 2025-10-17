@@ -1,36 +1,37 @@
 import { useEffect, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../utils/firebase';
-import { COLLECTIONS } from '../utils/constants';
+import { ref, onValue, set, update, onDisconnect, remove, serverTimestamp } from 'firebase/database';
+import { rtdb } from '../utils/firebase';
 import { usePresence } from '../context/PresenceContext';
 import { useAuth } from '../context/AuthContext';
 import { getUserColorHex } from '../utils/colorGenerator';
 
 /**
- * Custom hook to manage user presence in Firestore
+ * Custom hook to manage user presence in Firebase Realtime Database
  * Listens for online users and provides functions to set/remove presence
+ * Uses RTDB for faster real-time updates and automatic cleanup via onDisconnect
  */
 export function usePresenceManager() {
   const { setAllOnlineUsers, setAllCursors } = usePresence();
   const { currentUser, userProfile } = useAuth();
 
-  // Listen to presence changes from Firestore
+  // Listen to presence changes from Realtime Database
   useEffect(() => {
     if (!currentUser) return;
 
-    const presenceRef = collection(db, COLLECTIONS.PRESENCE);
+    const presenceRef = ref(rtdb, 'presence');
     
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onValue(
       presenceRef,
       (snapshot) => {
         const users = [];
         const cursorsData = {};
         
-        snapshot.forEach((doc) => {
-          const data = doc.data();
+        snapshot.forEach((childSnapshot) => {
+          const data = childSnapshot.val();
+          const userId = childSnapshot.key;
           
           users.push({
-            userId: doc.id,
+            userId: userId,
             displayName: data.displayName,
             colorHex: data.colorHex,
             onlineStatus: data.onlineStatus,
@@ -39,7 +40,7 @@ export function usePresenceManager() {
           
           // Store cursor positions
           if (data.cursorX !== undefined && data.cursorY !== undefined) {
-            cursorsData[doc.id] = {
+            cursorsData[userId] = {
               x: data.cursorX,
               y: data.cursorY,
               displayName: data.displayName,
@@ -58,14 +59,14 @@ export function usePresenceManager() {
 
     // Cleanup listener on unmount
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, setAllOnlineUsers, setAllCursors]);
 
-  // Function to set user as online in Firestore
+  // Function to set user as online in Realtime Database with automatic cleanup
   const setUserPresence = useCallback(async () => {
     if (!currentUser || !userProfile) return;
 
     try {
-      const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
       
       // Use userProfile colorHex, or generate from email as fallback
       const colorHex = userProfile.colorHex || 
@@ -76,7 +77,8 @@ export function usePresenceManager() {
         currentUser.email?.split('@')[0] || 
         'Anonymous';
       
-      await setDoc(presenceRef, {
+      // Set presence data
+      await set(presenceRef, {
         userId: currentUser.uid,
         displayName: displayName,
         colorHex: colorHex,
@@ -85,35 +87,41 @@ export function usePresenceManager() {
         lastActive: serverTimestamp(),
         onlineStatus: 'online',
       });
+      
+      // Automatically remove presence when user disconnects
+      // This is a key advantage of Realtime Database!
+      onDisconnect(presenceRef).remove();
     } catch (error) {
       console.error('Error setting user presence:', error);
     }
   }, [currentUser, userProfile]);
 
-  // Function to remove user presence from Firestore
+  // Function to remove user presence from Realtime Database
   const removeUserPresence = useCallback(async () => {
     if (!currentUser) return;
 
     try {
-      const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
-      await deleteDoc(presenceRef);
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
+      await remove(presenceRef);
     } catch (error) {
       console.error('Error removing user presence:', error);
     }
   }, [currentUser]);
 
-  // Function to update cursor position in Firestore
+  // Function to update cursor position in Realtime Database
+  // This is much faster than Firestore for frequent updates
   const updateCursorPosition = useCallback(async (x, y) => {
     if (!currentUser) return;
 
     try {
-      const presenceRef = doc(db, COLLECTIONS.PRESENCE, currentUser.uid);
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
       
-      await setDoc(presenceRef, {
+      // Use update() instead of set() to only modify specific fields
+      await update(presenceRef, {
         cursorX: x,
         cursorY: y,
         lastActive: serverTimestamp(),
-      }, { merge: true });
+      });
     } catch (error) {
       console.error('Error updating cursor position:', error);
     }

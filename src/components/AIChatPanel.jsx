@@ -203,14 +203,6 @@ function AIChatPanel() {
               {isProcessing ? '⏳' : '➤'}
             </button>
           </form>
-
-          {/* API Key Warning */}
-          {!import.meta.env.VITE_OPENAI_API_KEY || 
-           import.meta.env.VITE_OPENAI_API_KEY === 'your-openai-api-key-here' ? (
-            <div className="ai-api-warning">
-              ⚠️ OpenAI API key not configured. Add it to .env.local
-            </div>
-          ) : null}
         </div>
       )}
     </div>

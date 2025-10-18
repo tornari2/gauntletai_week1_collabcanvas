@@ -50,32 +50,13 @@ function Toolbar() {
     deleteShapes
   } = useCanvas()
 
-  const handleCreateRectangle = () => {
-    setCreatingRectangle(!creatingRectangle)
-    setCreatingDiamond(false)
-    setCreatingCircle(false)
-    setCreatingArrow(false)
-  }
-
-  const handleCreateDiamond = () => {
-    setCreatingDiamond(!creatingDiamond)
-    setCreatingRectangle(false)
-    setCreatingCircle(false)
-    setCreatingArrow(false)
-  }
-
-  const handleCreateCircle = () => {
-    setCreatingCircle(!creatingCircle)
-    setCreatingRectangle(false)
-    setCreatingDiamond(false)
-    setCreatingArrow(false)
-  }
-
-  const handleCreateArrow = () => {
-    setCreatingArrow(!creatingArrow)
+  // Helper to toggle shape creation mode and deactivate others
+  const toggleShapeMode = (setter, currentState) => {
     setCreatingRectangle(false)
     setCreatingDiamond(false)
     setCreatingCircle(false)
+    setCreatingArrow(false)
+    setter(!currentState)
   }
 
   const handleClearCanvas = () => {
@@ -95,28 +76,28 @@ function Toolbar() {
     <div className="toolbar">
       <button
         className={`toolbar-button ${creatingRectangle ? 'active' : ''}`}
-        onClick={handleCreateRectangle}
+        onClick={() => toggleShapeMode(setCreatingRectangle, creatingRectangle)}
         title="Create Rectangle"
       >
         <RectangleIcon />
       </button>
       <button
         className={`toolbar-button ${creatingDiamond ? 'active' : ''}`}
-        onClick={handleCreateDiamond}
+        onClick={() => toggleShapeMode(setCreatingDiamond, creatingDiamond)}
         title="Create Diamond"
       >
         <DiamondIcon />
       </button>
       <button
         className={`toolbar-button ${creatingCircle ? 'active' : ''}`}
-        onClick={handleCreateCircle}
+        onClick={() => toggleShapeMode(setCreatingCircle, creatingCircle)}
         title="Create Ellipse"
       >
         <EllipseIcon />
       </button>
       <button
         className={`toolbar-button ${creatingArrow ? 'active' : ''}`}
-        onClick={handleCreateArrow}
+        onClick={() => toggleShapeMode(setCreatingArrow, creatingArrow)}
         title="Create Arrow"
       >
         <ArrowIcon />

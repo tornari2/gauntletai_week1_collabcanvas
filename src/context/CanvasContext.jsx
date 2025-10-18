@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../utils/firebase';
 import { COLLECTIONS, GLOBAL_CANVAS_ID } from '../utils/constants';
+import { calculateZIndex } from '../utils/throttle';
 import { useAuth } from './AuthContext';
 
 const CanvasContext = createContext();
@@ -39,37 +40,20 @@ export function CanvasProvider({ children }) {
   // Layer customization settings
   const [defaultLayerPosition, setDefaultLayerPosition] = useState('front'); // 'front' or 'back'
   
-  const { currentUser, loading } = useAuth();
+  const { currentUser } = useAuth();
   
   // Set up Firestore listener for real-time shape updates
   useEffect(() => {
     if (!currentUser) return;
 
-    console.log('🎨 Setting up Firestore listener for shapes...');
     const shapesRef = collection(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES);
     
     const unsubscribe = onSnapshot(
       shapesRef,
       (snapshot) => {
-        console.log(`📦 Received ${snapshot.size} shapes from Firestore`);
-        
         const shapes = [];
         snapshot.forEach((doc) => {
           shapes.push({ id: doc.id, ...doc.data() });
-        });
-        
-        // Log shape changes
-        snapshot.docChanges().forEach((change) => {
-          const shapeData = change.doc.data();
-          if (change.type === 'added') {
-            console.log(`✅ Shape added: ${change.doc.id} (${shapeData.type})`);
-          }
-          if (change.type === 'modified') {
-            console.log(`🔄 Shape modified: ${change.doc.id} (${shapeData.type})`);
-          }
-          if (change.type === 'removed') {
-            console.log(`❌ Shape removed: ${change.doc.id}`);
-          }
         });
         
         // Sort by zIndex for consistent ordering (layering)
@@ -82,17 +66,11 @@ export function CanvasProvider({ children }) {
         setShapes(shapes);
       },
       (error) => {
-        console.error('❌ Firestore listener error:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
+        console.error('Firestore listener error:', error);
       }
     );
 
-    // Cleanup listener on unmount
-    return () => {
-      console.log('🔌 Cleaning up Firestore listener');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [currentUser]);
 
   // Add a new shape to the canvas (with Firebase sync)
@@ -101,13 +79,11 @@ export function CanvasProvider({ children }) {
     const user = currentUser || auth.currentUser;
     
     if (!user) {
-      console.error('❌ Cannot add shape: No authenticated user');
+      console.error('Cannot add shape: No authenticated user');
       return;
     }
     
     try {
-      console.log(`➕ Adding shape: ${shape.id} (${shape.type}) by user ${user.uid.substring(0, 8)}...`);
-      
       // Optimistic update: add to local state immediately
       setShapes((prevShapes) => [...prevShapes, shape]);
       
@@ -121,12 +97,8 @@ export function CanvasProvider({ children }) {
         updatedAt: serverTimestamp(),
         lastModifiedBy: user.uid,
       });
-      
-      console.log(`✅ Shape ${shape.id} synced to Firestore`);
     } catch (error) {
-      console.error('❌ Error adding shape:', error);
-      console.error('Shape ID:', shape.id);
-      console.error('Shape type:', shape.type);
+      console.error('Error adding shape:', error);
       // Revert optimistic update on error
       setShapes((prevShapes) => prevShapes.filter(s => s.id !== shape.id));
     }
@@ -248,35 +220,17 @@ export function CanvasProvider({ children }) {
   }
   
   // Calculate zIndex for new shapes based on defaultLayerPosition
-  function getNewShapeZIndex() {
-    if (defaultLayerPosition === 'front') {
-      // Create on top - use current timestamp
-      return Date.now();
-    } else {
-      // Create at back - find lowest zIndex and subtract
-      const minZIndex = shapes.reduce((min, shape) => {
-        const shapeZ = shape.zIndex || 0;
-        return shapeZ < min ? shapeZ : min;
-      }, Infinity);
-      
-      return (minZIndex === Infinity ? 0 : minZIndex) - 1;
-    }
-  }
+  const getNewShapeZIndex = useCallback(() => {
+    return calculateZIndex(shapes, defaultLayerPosition);
+  }, [shapes, defaultLayerPosition]);
   
   // Send shape to front (highest zIndex)
-  async function sendToFront(shapeId) {
+  const sendToFront = useCallback(async (shapeId) => {
     const user = currentUser || auth.currentUser;
     if (!user) return;
     
     try {
-      // Find the highest zIndex among all shapes
-      const maxZIndex = shapes.reduce((max, shape) => {
-        const shapeZ = shape.zIndex || 0;
-        return shapeZ > max ? shapeZ : max;
-      }, 0);
-      
-      // Set this shape's zIndex to max + 1
-      const newZIndex = maxZIndex + 1;
+      const newZIndex = calculateZIndex(shapes, 'front');
       
       // Optimistic update
       setShapes((prevShapes) =>
@@ -295,22 +249,15 @@ export function CanvasProvider({ children }) {
     } catch (error) {
       console.error('Error sending shape to front:', error);
     }
-  }
+  }, [currentUser, shapes]);
   
   // Send shape to back (lowest zIndex)
-  async function sendToBack(shapeId) {
+  const sendToBack = useCallback(async (shapeId) => {
     const user = currentUser || auth.currentUser;
     if (!user) return;
     
     try {
-      // Find the lowest zIndex among all shapes
-      const minZIndex = shapes.reduce((min, shape) => {
-        const shapeZ = shape.zIndex || 0;
-        return shapeZ < min ? shapeZ : min;
-      }, Infinity);
-      
-      // Set this shape's zIndex to min - 1
-      const newZIndex = (minZIndex === Infinity ? 0 : minZIndex) - 1;
+      const newZIndex = calculateZIndex(shapes, 'back');
       
       // Optimistic update
       setShapes((prevShapes) =>
@@ -329,7 +276,7 @@ export function CanvasProvider({ children }) {
     } catch (error) {
       console.error('Error sending shape to back:', error);
     }
-  }
+  }, [currentUser, shapes]);
 
   const value = {
     shapes,

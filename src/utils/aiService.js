@@ -5,7 +5,14 @@
  */
 
 // Backend API endpoint for AI chat
-const AI_CHAT_ENDPOINT = '/api/ai-chat';
+// In development, use production API; in production, use relative path
+const AI_CHAT_ENDPOINT = import.meta.env.DEV && import.meta.env.VITE_PRODUCTION_URL
+  ? `${import.meta.env.VITE_PRODUCTION_URL}/api/ai-chat`
+  : '/api/ai-chat';
+
+console.log('AI_CHAT_ENDPOINT:', AI_CHAT_ENDPOINT);
+console.log('import.meta.env.DEV:', import.meta.env.DEV);
+console.log('import.meta.env.VITE_PRODUCTION_URL:', import.meta.env.VITE_PRODUCTION_URL);
 
 /**
  * Parse user command using OpenAI (via secure backend API)
@@ -16,6 +23,8 @@ const AI_CHAT_ENDPOINT = '/api/ai-chat';
  */
 export async function parseCommand(userMessage, conversationHistory = [], context = {}) {
   try {
+    console.log('Fetching from:', AI_CHAT_ENDPOINT);
+    
     // Call backend API instead of OpenAI directly
     const response = await fetch(AI_CHAT_ENDPOINT, {
       method: 'POST',
@@ -29,9 +38,20 @@ export async function parseCommand(userMessage, conversationHistory = [], contex
       }),
     });
 
+    console.log('Response status:', response.status);
+
+    // Check if response is ok before trying to parse JSON
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to process command');
+      // Try to get error details
+      let errorMessage = `Server error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        // If parsing error response fails, use status text
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

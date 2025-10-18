@@ -4,7 +4,6 @@ import { CanvasProvider } from './context/CanvasContext'
 import { PresenceProvider } from './context/PresenceContext'
 import { AIProvider } from './context/AIContext'
 import { usePresenceManager } from './hooks/usePresence'
-import { testPresenceConnection } from './utils/presenceDebug'
 import LoginModal from './components/LoginModal'
 import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
@@ -21,13 +20,6 @@ function AppContent() {
   // Initialize user presence when logged in
   useEffect(() => {
     if (currentUser && userProfile) {
-      console.log('🚀 Initializing presence for:', userProfile.displayName || currentUser.email);
-      console.log('👤 User ID:', currentUser.uid);
-      console.log('🎨 User Color:', userProfile.colorHex);
-      
-      // Run debug test
-      testPresenceConnection();
-      
       setUserPresence()
       
       // Cleanup presence on browser close

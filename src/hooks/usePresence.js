@@ -166,9 +166,6 @@ export function usePresenceManager() {
     try {
       const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
       
-      // Debug: Log cursor updates
-      console.log(`🖱️ Updating cursor for ${currentUser.uid.substring(0, 8)}... to (${Math.round(x)}, ${Math.round(y)})`);
-      
       // Use update() instead of set() to only modify specific fields
       await update(presenceRef, {
         cursorX: x,
@@ -177,8 +174,6 @@ export function usePresenceManager() {
       });
     } catch (error) {
       console.error('Error updating cursor position:', error);
-      console.error('User ID:', currentUser.uid);
-      console.error('Attempted position:', x, y);
     }
   }, [currentUser]);
 

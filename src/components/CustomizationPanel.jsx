@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useCanvas } from '../context/CanvasContext'
+import { hexToHue, hueToRgba, rgbaToHex } from '../utils/colorUtils'
 import '../styles/CustomizationPanel.css'
 
 function CustomizationPanel() {
@@ -33,8 +34,6 @@ function CustomizationPanel() {
   } = useCanvas()
 
   // Local state for editing - hue value 0-360
-  // 0: black
-  // 1-360: color spectrum
   const [localHue, setLocalHue] = useState(0)
   const [localOpacity, setLocalOpacity] = useState(fillOpacity)
   const [localThickness, setLocalThickness] = useState(borderThickness)
@@ -48,37 +47,23 @@ function CustomizationPanel() {
   // Get the selected shape
   const selectedShape = selectedShapeId ? shapes.find(s => s.id === selectedShapeId) : null
 
-  // Convert hex to hue
-  const hexToHue = (hex) => {
-    const r = parseInt(hex.slice(1, 3), 16) / 255
-    const g = parseInt(hex.slice(3, 5), 16) / 255
-    const b = parseInt(hex.slice(5, 7), 16) / 255
-    
-    // Check if it's black (all values very close to 0)
-    if (r < 0.1 && g < 0.1 && b < 0.1) {
-      return 0
+  // Parse rgba color and extract components
+  const parseRgbaColor = (colorSource) => {
+    const rgbaMatch = colorSource.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/)
+    if (rgbaMatch) {
+      const r = parseInt(rgbaMatch[1])
+      const g = parseInt(rgbaMatch[2])
+      const b = parseInt(rgbaMatch[3])
+      const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1
+      
+      const hex = '#' + [r, g, b].map(x => {
+        const hexValue = x.toString(16)
+        return hexValue.length === 1 ? '0' + hexValue : hexValue
+      }).join('')
+      
+      return { hex, opacity: a }
     }
-    
-    // Convert to hue
-    const max = Math.max(r, g, b)
-    const min = Math.min(r, g, b)
-    const delta = max - min
-    
-    if (delta === 0) return 0
-    
-    let hue
-    if (max === r) {
-      hue = ((g - b) / delta) % 6
-    } else if (max === g) {
-      hue = (b - r) / delta + 2
-    } else {
-      hue = (r - g) / delta + 4
-    }
-    
-    hue = Math.round(hue * 60)
-    if (hue < 0) hue += 360
-    
-    return hue
+    return null
   }
 
   // Update local state when selection changes or global defaults change
@@ -89,30 +74,13 @@ function CustomizationPanel() {
         ? (selectedShape.borderColor || 'rgba(128, 128, 128, 0.5)')
         : (selectedShape.fillColor || 'rgba(128, 128, 128, 0.5)')
       
-      // Parse rgba to extract rgb and opacity
-      const rgbaMatch = colorSource.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/)
-      if (rgbaMatch) {
-        const r = parseInt(rgbaMatch[1])
-        const g = parseInt(rgbaMatch[2])
-        const b = parseInt(rgbaMatch[3])
-        const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1
-        
-        const hex = '#' + [r, g, b].map(x => {
-          const hexValue = x.toString(16)
-          return hexValue.length === 1 ? '0' + hexValue : hexValue
-        }).join('')
-        
-        setLocalHue(hexToHue(hex))
+      const parsed = parseRgbaColor(colorSource)
+      if (parsed) {
+        setLocalHue(hexToHue(parsed.hex))
         
         // Enforce minimum 10% opacity for arrows and text
         const isArrowOrText = selectedShape.type === 'arrow' || selectedShape.type === 'text'
-        if (isArrowOrText && a < 0.1) {
-          setLocalOpacity(0.1)
-        } else if (creatingArrow && a < 0.1) {
-          setLocalOpacity(0.1)
-        } else {
-          setLocalOpacity(a)
-        }
+        setLocalOpacity(isArrowOrText && parsed.opacity < 0.1 ? 0.1 : parsed.opacity)
       }
       
       // Only update border properties for shapes that have borders (not text)
@@ -120,7 +88,6 @@ function CustomizationPanel() {
         setLocalThickness(selectedShape.strokeWidth || 2)
         setLocalBorderStyle(selectedShape.borderStyle || 'solid')
       } else {
-        // For text, keep the global defaults in the UI
         setLocalThickness(borderThickness)
         setLocalBorderStyle(borderStyle)
       }
@@ -136,14 +103,7 @@ function CustomizationPanel() {
     } else {
       // No selection - use global defaults
       setLocalHue(hexToHue(fillColor))
-      
-      // If in arrow creation mode and opacity is below 10%, enforce minimum
-      if (creatingArrow && fillOpacity < 0.1) {
-        setLocalOpacity(0.1)
-      } else {
-        setLocalOpacity(fillOpacity)
-      }
-      
+      setLocalOpacity(creatingArrow && fillOpacity < 0.1 ? 0.1 : fillOpacity)
       setLocalThickness(borderThickness)
       setLocalBorderStyle(borderStyle)
       setLocalFontSize(fontSize)
@@ -152,68 +112,24 @@ function CustomizationPanel() {
       setLocalTextDecoration(textDecoration)
       setLocalFontFamily(fontFamily)
     }
-  }, [selectedShape, selectedShapeId, fillColor, fillOpacity, borderThickness, borderStyle, fontSize, fontWeight, fontStyle, textDecoration, fontFamily, creatingArrow])
+  }, [selectedShape, selectedShapeId, fillColor, fillOpacity, borderThickness, borderStyle, 
+      fontSize, fontWeight, fontStyle, textDecoration, fontFamily, creatingArrow])
 
   // Automatically adjust opacity to 10% minimum when arrow creation mode is activated
-  // Restore original opacity when arrow mode is deactivated
   useEffect(() => {
     if (creatingArrow && localOpacity < 0.1) {
-      // Just update local display to 10%, don't change global default
       setLocalOpacity(0.1)
     } else if (!creatingArrow && !selectedShape) {
-      // When switching away from arrow mode, restore from global default
       setLocalOpacity(fillOpacity)
     }
   }, [creatingArrow, fillOpacity, selectedShape])
-
-  // Convert hue to rgba
-  const hueToRgba = (hue, opacity) => {
-    if (hue === 0) {
-      // Black
-      return `rgba(0, 0, 0, ${opacity})`
-    }
-    
-    // Convert HSL to RGB (full saturation, 50% lightness)
-    const s = 1
-    const l = 0.5
-    const c = (1 - Math.abs(2 * l - 1)) * s
-    const x = c * (1 - Math.abs((hue / 60) % 2 - 1))
-    const m = l - c / 2
-    
-    let r, g, b
-    if (hue < 60) {
-      [r, g, b] = [c, x, 0]
-    } else if (hue < 120) {
-      [r, g, b] = [x, c, 0]
-    } else if (hue < 180) {
-      [r, g, b] = [0, c, x]
-    } else if (hue < 240) {
-      [r, g, b] = [0, x, c]
-    } else if (hue < 300) {
-      [r, g, b] = [x, 0, c]
-    } else {
-      [r, g, b] = [c, 0, x]
-    }
-    
-    r = Math.round((r + m) * 255)
-    g = Math.round((g + m) * 255)
-    b = Math.round((b + m) * 255)
-    
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`
-  }
 
   // Handle hue change
   const handleHueChange = (newHue) => {
     setLocalHue(newHue)
     
     const rgba = hueToRgba(newHue, localOpacity)
-    
-    // Convert to hex for global storage
-    const [r, g, b] = rgba.match(/\d+/g).map(Number)
-    const hex = '#' + [r, g, b].map(x => {
-      const hexValue = x.toString(16)
-      return hexValue.length === 1 ? '0' + hexValue : hexValue
-    }).join('')
+    const hex = rgbaToHex(rgba)
     
     if (selectedShape) {
       // Update the selected shape only - do NOT update global defaults

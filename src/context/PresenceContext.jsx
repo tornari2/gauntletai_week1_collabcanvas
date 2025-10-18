@@ -13,6 +13,10 @@ export function usePresence() {
 export function PresenceProvider({ children }) {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [cursors, setCursors] = useState({});
+  const [shapePreviews, setShapePreviews] = useState({}); // Store other users' shape previews
+  const [pendingShapes, setPendingShapes] = useState({}); // Store other users' pending shapes (instant broadcast)
+  const [remoteSelections, setRemoteSelections] = useState({}); // Store other users' selected shapes
+  const [remoteTransforms, setRemoteTransforms] = useState({}); // Store other users' active transformations
 
   // Set user as online
   const setUserOnline = useCallback((userId, userData) => {
@@ -61,15 +65,43 @@ export function PresenceProvider({ children }) {
     setCursors(cursorsData);
   }, []);
 
+  // Set all shape previews at once
+  const setAllShapePreviews = useCallback((previewsData) => {
+    setShapePreviews(previewsData);
+  }, []);
+
+  // Set all pending shapes at once
+  const setAllPendingShapes = useCallback((pendingShapesData) => {
+    setPendingShapes(pendingShapesData);
+  }, []);
+
+  // Set all remote selections at once
+  const setAllRemoteSelections = useCallback((remoteSelectionsData) => {
+    setRemoteSelections(remoteSelectionsData);
+  }, []);
+
+  // Set all remote transforms at once
+  const setAllRemoteTransforms = useCallback((remoteTransformsData) => {
+    setRemoteTransforms(remoteTransformsData);
+  }, []);
+
   const value = useMemo(() => ({
     onlineUsers,
     cursors,
+    shapePreviews,
+    pendingShapes,
+    remoteSelections,
+    remoteTransforms,
     setUserOnline,
     setUserOffline,
     updateCursor,
     setAllOnlineUsers,
     setAllCursors,
-  }), [onlineUsers, cursors, setUserOnline, setUserOffline, updateCursor, setAllOnlineUsers, setAllCursors]);
+    setAllShapePreviews,
+    setAllPendingShapes,
+    setAllRemoteSelections,
+    setAllRemoteTransforms,
+  }), [onlineUsers, cursors, shapePreviews, pendingShapes, remoteSelections, remoteTransforms, setUserOnline, setUserOffline, updateCursor, setAllOnlineUsers, setAllCursors, setAllShapePreviews, setAllPendingShapes, setAllRemoteSelections, setAllRemoteTransforms]);
 
   return (
     <PresenceContext.Provider value={value}>

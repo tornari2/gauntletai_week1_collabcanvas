@@ -45,14 +45,31 @@ export function CanvasProvider({ children }) {
   useEffect(() => {
     if (!currentUser) return;
 
+    console.log('🎨 Setting up Firestore listener for shapes...');
     const shapesRef = collection(db, COLLECTIONS.CANVASES, GLOBAL_CANVAS_ID, COLLECTIONS.SHAPES);
     
     const unsubscribe = onSnapshot(
       shapesRef,
       (snapshot) => {
+        console.log(`📦 Received ${snapshot.size} shapes from Firestore`);
+        
         const shapes = [];
         snapshot.forEach((doc) => {
           shapes.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Log shape changes
+        snapshot.docChanges().forEach((change) => {
+          const shapeData = change.doc.data();
+          if (change.type === 'added') {
+            console.log(`✅ Shape added: ${change.doc.id} (${shapeData.type})`);
+          }
+          if (change.type === 'modified') {
+            console.log(`🔄 Shape modified: ${change.doc.id} (${shapeData.type})`);
+          }
+          if (change.type === 'removed') {
+            console.log(`❌ Shape removed: ${change.doc.id}`);
+          }
         });
         
         // Sort by zIndex for consistent ordering (layering)
@@ -65,12 +82,17 @@ export function CanvasProvider({ children }) {
         setShapes(shapes);
       },
       (error) => {
-        console.error('Firestore listener error:', error);
+        console.error('❌ Firestore listener error:', error);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
       }
     );
 
     // Cleanup listener on unmount
-    return () => unsubscribe();
+    return () => {
+      console.log('🔌 Cleaning up Firestore listener');
+      unsubscribe();
+    };
   }, [currentUser]);
 
   // Add a new shape to the canvas (with Firebase sync)
@@ -79,11 +101,13 @@ export function CanvasProvider({ children }) {
     const user = currentUser || auth.currentUser;
     
     if (!user) {
-      console.error('Cannot add shape: No authenticated user');
+      console.error('❌ Cannot add shape: No authenticated user');
       return;
     }
     
     try {
+      console.log(`➕ Adding shape: ${shape.id} (${shape.type}) by user ${user.uid.substring(0, 8)}...`);
+      
       // Optimistic update: add to local state immediately
       setShapes((prevShapes) => [...prevShapes, shape]);
       
@@ -97,8 +121,12 @@ export function CanvasProvider({ children }) {
         updatedAt: serverTimestamp(),
         lastModifiedBy: user.uid,
       });
+      
+      console.log(`✅ Shape ${shape.id} synced to Firestore`);
     } catch (error) {
-      console.error('Error adding shape:', error);
+      console.error('❌ Error adding shape:', error);
+      console.error('Shape ID:', shape.id);
+      console.error('Shape type:', shape.type);
       // Revert optimistic update on error
       setShapes((prevShapes) => prevShapes.filter(s => s.id !== shape.id));
     }

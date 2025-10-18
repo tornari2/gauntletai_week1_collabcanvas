@@ -11,7 +11,7 @@ import { getUserColorHex } from '../utils/colorGenerator';
  * Uses RTDB for faster real-time updates and automatic cleanup via onDisconnect
  */
 export function usePresenceManager() {
-  const { setAllOnlineUsers, setAllCursors } = usePresence();
+  const { setAllOnlineUsers, setAllCursors, setAllShapePreviews, setAllPendingShapes, setAllRemoteSelections, setAllRemoteTransforms } = usePresence();
   const { currentUser, userProfile } = useAuth();
 
   // Listen to presence changes from Realtime Database
@@ -25,6 +25,8 @@ export function usePresenceManager() {
       (snapshot) => {
         const users = [];
         const cursorsData = {};
+        const previewsData = {};
+        const pendingShapesData = {};
         
         snapshot.forEach((childSnapshot) => {
           const data = childSnapshot.val();
@@ -47,10 +49,58 @@ export function usePresenceManager() {
               colorHex: data.colorHex,
             };
           }
+          
+          // Store shape previews (shapes being drawn)
+          if (data.shapePreview) {
+            previewsData[userId] = {
+              ...data.shapePreview,
+              displayName: data.displayName,
+              colorHex: data.colorHex,
+            };
+          }
+          
+          // Store pending shapes (just created, waiting for Firestore sync)
+          if (data.pendingShape) {
+            pendingShapesData[userId] = {
+              ...data.pendingShape,
+              creatorId: userId,
+              displayName: data.displayName,
+              colorHex: data.colorHex,
+            };
+          }
         });
         
         setAllOnlineUsers(users);
         setAllCursors(cursorsData);
+        setAllShapePreviews(previewsData);
+        setAllPendingShapes(pendingShapesData);
+        
+        // Extract remote selections
+        const remoteSelectionsData = {};
+        const remoteTransformsData = {};
+        snapshot.forEach((childSnapshot) => {
+          const data = childSnapshot.val();
+          const userId = childSnapshot.key;
+          
+          if (data.selectedShapes && Array.isArray(data.selectedShapes) && data.selectedShapes.length > 0) {
+            remoteSelectionsData[userId] = {
+              shapeIds: data.selectedShapes,
+              displayName: data.displayName,
+              colorHex: data.colorHex,
+            };
+          }
+          
+          // Store active transformations
+          if (data.activeTransform) {
+            remoteTransformsData[userId] = {
+              ...data.activeTransform,
+              displayName: data.displayName,
+              colorHex: data.colorHex,
+            };
+          }
+        });
+        setAllRemoteSelections(remoteSelectionsData);
+        setAllRemoteTransforms(remoteTransformsData);
       },
       (error) => {
         console.error('Error listening to presence:', error);
@@ -59,7 +109,7 @@ export function usePresenceManager() {
 
     // Cleanup listener on unmount
     return () => unsubscribe();
-  }, [currentUser, setAllOnlineUsers, setAllCursors]);
+  }, [currentUser, setAllOnlineUsers, setAllCursors, setAllShapePreviews, setAllPendingShapes, setAllRemoteSelections, setAllRemoteTransforms]);
 
   // Function to set user as online in Realtime Database with automatic cleanup
   const setUserPresence = useCallback(async () => {
@@ -116,6 +166,9 @@ export function usePresenceManager() {
     try {
       const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
       
+      // Debug: Log cursor updates
+      console.log(`🖱️ Updating cursor for ${currentUser.uid.substring(0, 8)}... to (${Math.round(x)}, ${Math.round(y)})`);
+      
       // Use update() instead of set() to only modify specific fields
       await update(presenceRef, {
         cursorX: x,
@@ -124,6 +177,90 @@ export function usePresenceManager() {
       });
     } catch (error) {
       console.error('Error updating cursor position:', error);
+      console.error('User ID:', currentUser.uid);
+      console.error('Attempted position:', x, y);
+    }
+  }, [currentUser]);
+
+  // Function to update shape preview while creating (real-time preview for other users)
+  const updateShapePreview = useCallback(async (previewData) => {
+    if (!currentUser) return;
+
+    try {
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
+      
+      // Update with preview data (or null to clear)
+      await update(presenceRef, {
+        shapePreview: previewData || null,
+        lastActive: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Error updating shape preview:', error);
+    }
+  }, [currentUser]);
+
+  // Function to broadcast a finalized shape instantly (before Firestore sync)
+  const broadcastShape = useCallback(async (shapeData) => {
+    if (!currentUser) return;
+
+    try {
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
+      
+      // Broadcast the shape with a timestamp
+      await update(presenceRef, {
+        pendingShape: {
+          ...shapeData,
+          broadcastTime: Date.now(),
+        },
+        lastActive: serverTimestamp(),
+      });
+
+      // Clear the pending shape after 5 seconds (Firestore should have synced by then)
+      setTimeout(async () => {
+        try {
+          await update(presenceRef, {
+            pendingShape: null,
+          });
+        } catch (error) {
+          console.error('Error clearing pending shape:', error);
+        }
+      }, 5000);
+    } catch (error) {
+      console.error('Error broadcasting shape:', error);
+    }
+  }, [currentUser]);
+
+  // Function to broadcast selected shape(s) to other users
+  const broadcastSelection = useCallback(async (selectedShapeIds) => {
+    if (!currentUser) return;
+
+    try {
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
+      
+      // Broadcast selection (array of shape IDs)
+      await update(presenceRef, {
+        selectedShapes: selectedShapeIds || [],
+        lastActive: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Error broadcasting selection:', error);
+    }
+  }, [currentUser]);
+
+  // Function to broadcast ongoing shape transformations (drag, rotate, scale)
+  const broadcastTransform = useCallback(async (transformData) => {
+    if (!currentUser) return;
+
+    try {
+      const presenceRef = ref(rtdb, `presence/${currentUser.uid}`);
+      
+      // Broadcast transformation with timestamp
+      await update(presenceRef, {
+        activeTransform: transformData || null,
+        lastActive: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Error broadcasting transform:', error);
     }
   }, [currentUser]);
 
@@ -131,6 +268,10 @@ export function usePresenceManager() {
     setUserPresence,
     removeUserPresence,
     updateCursorPosition,
+    updateShapePreview,
+    broadcastShape,
+    broadcastSelection,
+    broadcastTransform,
   };
 }
 

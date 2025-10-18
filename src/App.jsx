@@ -2,13 +2,16 @@ import React, { useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CanvasProvider } from './context/CanvasContext'
 import { PresenceProvider } from './context/PresenceContext'
+import { AIProvider } from './context/AIContext'
 import { usePresenceManager } from './hooks/usePresence'
+import { testPresenceConnection } from './utils/presenceDebug'
 import LoginModal from './components/LoginModal'
 import Canvas from './components/Canvas'
 import Toolbar from './components/Toolbar'
 import UserList from './components/UserList'
 import CustomizationPanel from './components/CustomizationPanel'
 import Legend from './components/Legend'
+import AIChatPanel from './components/AIChatPanel'
 import './App.css'
 
 function AppContent() {
@@ -18,6 +21,13 @@ function AppContent() {
   // Initialize user presence when logged in
   useEffect(() => {
     if (currentUser && userProfile) {
+      console.log('🚀 Initializing presence for:', userProfile.displayName || currentUser.email);
+      console.log('👤 User ID:', currentUser.uid);
+      console.log('🎨 User Color:', userProfile.colorHex);
+      
+      // Run debug test
+      testPresenceConnection();
+      
       setUserPresence()
       
       // Cleanup presence on browser close
@@ -59,6 +69,7 @@ function AppContent() {
       <UserList />
       <CustomizationPanel />
       <Legend />
+      <AIChatPanel />
     </div>
   )
 }
@@ -68,7 +79,9 @@ function App() {
     <AuthProvider>
       <PresenceProvider>
         <CanvasProvider>
-          <AppContent />
+          <AIProvider>
+            <AppContent />
+          </AIProvider>
         </CanvasProvider>
       </PresenceProvider>
     </AuthProvider>

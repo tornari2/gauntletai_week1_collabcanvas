@@ -540,12 +540,15 @@ function CustomizationPanel() {
           <button
             className={`layer-btn ${defaultLayerPosition === 'front' ? 'active' : ''}`}
             onClick={() => {
-              setDefaultLayerPosition('front');
               if (selectedShapeId) {
+                // If shape is selected, just send it to front without changing default
                 sendToFront(selectedShapeId);
+              } else {
+                // If no shape selected, change default layer position
+                setDefaultLayerPosition('front');
               }
             }}
-            title={selectedShapeId ? "Send selected to front & set as default" : "New shapes will appear in front"}
+            title={selectedShapeId ? "Send selected to front" : "Set default: new shapes will appear in front"}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5l0 14M5 12l7-7 7 7" />
@@ -555,12 +558,15 @@ function CustomizationPanel() {
           <button
             className={`layer-btn ${defaultLayerPosition === 'back' ? 'active' : ''}`}
             onClick={() => {
-              setDefaultLayerPosition('back');
               if (selectedShapeId) {
+                // If shape is selected, just send it to back without changing default
                 sendToBack(selectedShapeId);
+              } else {
+                // If no shape selected, change default layer position
+                setDefaultLayerPosition('back');
               }
             }}
-            title={selectedShapeId ? "Send selected to back & set as default" : "New shapes will appear in back"}
+            title={selectedShapeId ? "Send selected to back" : "Set default: new shapes will appear in back"}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 19l0-14M5 12l7 7 7-7" />

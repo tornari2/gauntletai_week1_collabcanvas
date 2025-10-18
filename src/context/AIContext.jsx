@@ -33,7 +33,7 @@ export function AIProvider({ children }) {
     if (!isAPIKeyConfigured()) {
       const errorMsg = {
         role: 'assistant',
-        content: 'OpenAI API key is not configured. Please add your API key to the .env.local file.',
+        content: 'OpenAI API is not responding. Please check your server configuration.',
         timestamp: Date.now(),
         error: true,
       };

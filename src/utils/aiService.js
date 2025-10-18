@@ -1,180 +1,14 @@
 /**
  * AI Service
  * Handles OpenAI API integration for canvas command parsing
+ * Now uses secure backend API instead of exposing API key
  */
 
-import OpenAI from 'openai';
-
-// Initialize OpenAI client
-let openaiClient = null;
-
-function getOpenAIClient() {
-  if (!openaiClient) {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    
-    if (!apiKey || apiKey === 'your-openai-api-key-here') {
-      throw new Error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env.local file.');
-    }
-    
-    openaiClient = new OpenAI({
-      apiKey,
-      dangerouslyAllowBrowser: true, // Note: For production, move API calls to backend
-    });
-  }
-  
-  return openaiClient;
-}
+// Backend API endpoint for AI chat
+const AI_CHAT_ENDPOINT = '/api/ai-chat';
 
 /**
- * System prompt for the AI assistant
- */
-const SYSTEM_PROMPT = `You are an AI assistant that helps users create and manipulate shapes on a collaborative canvas.
-
-Available shape types:
-- rectangle: Has x, y, width, height, fillColor, borderColor, strokeWidth, rotation
-- circle: Has x, y, radiusX, radiusY, fillColor, borderColor, strokeWidth, rotation
-- diamond: Has x, y, width, height, fillColor, borderColor, strokeWidth, rotation
-- text: Has x, y, text, fontSize, fontWeight, fontStyle, fontFamily, fillColor, rotation
-- arrow: Has points [x1, y1, x2, y2], fillColor, borderColor, strokeWidth
-
-Available operations:
-1. CREATE: Create new shapes
-   - Example: "Create a red circle at position 100, 200"
-   - Example: "Add text that says 'Hello World'"
-   - Example: "Make a 200x300 blue rectangle"
-
-2. MOVE: Move existing shapes
-   - Example: "Move the blue rectangle to the center"
-   - Example: "Move the selected shape to 500, 300"
-   - Target can be "selected" for currently selected shapes
-
-3. RESIZE: Resize shapes
-   - Example: "Make the circle twice as big"
-   - Example: "Resize the rectangle to 150x200"
-   - Example: "Make the blue rectangle twice as large"
-   - Target can be "selected" for currently selected shapes
-   - IMPORTANT: Always include "target" field with shape description
-
-4. ROTATE: Rotate shapes
-   - Example: "Rotate the text 45 degrees"
-   - Example: "Rotate the selected shape 90 degrees"
-   - Target can be "selected" for currently selected shapes
-
-5. DELETE: Delete shapes
-   - Example: "Delete the red circle"
-   - Example: "Remove all rectangles"
-   - Target can be "selected" for currently selected shapes
-
-6. GRID: Create grids of shapes
-   - Example: "Create a 3x3 grid of squares"
-   - Example: "Make a 2x4 grid of red circles"
-
-7. ARRANGE: Arrange shapes with even spacing
-   - Example: "Space these elements evenly horizontally"
-   - Example: "Arrange all shapes vertically"
-
-8. COMPLEX: Create composite structures
-   - Templates: login-form, navigation-bar, card-layout, button-group
-   - Example: "Create a login form"
-   - Example: "Build a navigation bar with 4 menu items"
-
-Position keywords:
-- center, middle, top-left, top-right, bottom-left, bottom-right, top, bottom, left, right
-- Or numeric coordinates: x, y
-
-Color names:
-- red, blue, green, yellow, orange, purple, pink, brown, black, white, gray
-- Or hex codes: #FF0000
-
-Size keywords:
-- tiny (30), small (50), medium (100), large (150), huge (200), giant (300)
-- Or numeric values in pixels
-
-You must respond with a JSON object in this exact format:
-{
-  "operations": [
-    {
-      "type": "create|move|resize|rotate|delete|grid|arrange|complex",
-      ... operation-specific properties ...
-    }
-  ],
-  "message": "A friendly message explaining what you did"
-}
-
-Examples:
-
-User: "Create a red circle at the center"
-Response:
-{
-  "operations": [
-    {
-      "type": "create",
-      "shape": "circle",
-      "properties": {
-        "x": "center",
-        "y": "center",
-        "radius": 50,
-        "fillColor": "red"
-      }
-    }
-  ],
-  "message": "Created a red circle at the center of the canvas."
-}
-
-User: "Make a 3x3 grid of blue squares"
-Response:
-{
-  "operations": [
-    {
-      "type": "grid",
-      "rows": 3,
-      "columns": 3,
-      "shape": "rectangle",
-      "spacing": 20,
-      "shapeProperties": {
-        "size": "medium",
-        "fillColor": "blue"
-      }
-    }
-  ],
-  "message": "Created a 3x3 grid of blue squares with spacing between them."
-}
-
-User: "Make the blue rectangle twice as big"
-Response:
-{
-  "operations": [
-    {
-      "type": "resize",
-      "target": "blue rectangle",
-      "scale": 2
-    }
-  ],
-  "message": "Resized the blue rectangle to be twice as big."
-}
-
-User: "Create a login form"
-Response:
-{
-  "operations": [
-    {
-      "type": "complex",
-      "template": "login-form",
-      "parameters": {
-        "position": {
-          "x": "center",
-          "y": "center"
-        }
-      }
-    }
-  ],
-  "message": "Created a login form with username and password fields, and a submit button."
-}
-
-Always respond with valid JSON. Be helpful and creative while following the user's intent.`;
-
-/**
- * Parse user command using OpenAI
+ * Parse user command using OpenAI (via secure backend API)
  * @param {string} userMessage - User's natural language command
  * @param {Array} conversationHistory - Previous messages in the conversation
  * @param {object} context - Canvas context with selected shapes info
@@ -182,90 +16,26 @@ Always respond with valid JSON. Be helpful and creative while following the user
  */
 export async function parseCommand(userMessage, conversationHistory = [], context = {}) {
   try {
-    const client = getOpenAIClient();
-    
-    // Build context information for the AI
-    let contextPrompt = SYSTEM_PROMPT;
-    
-    // Add selected shapes context if available
-    if (context.selectedShapes && context.selectedShapes.length > 0) {
-      const shapeDescriptions = context.selectedShapes.map(shape => {
-        let desc = `${shape.type}`;
-        if (shape.fillColor) {
-          // Extract color from rgba string
-          const colorMatch = shape.fillColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-          if (colorMatch) {
-            const [_, r, g, b] = colorMatch.map(Number);
-            // Simple color naming
-            let colorName = 'gray';
-            if (r > 200 && g < 100 && b < 100) colorName = 'red';
-            else if (r < 100 && g > 200 && b < 100) colorName = 'green';
-            else if (r < 100 && g < 100 && b > 200) colorName = 'blue';
-            else if (r > 200 && g > 200 && b < 100) colorName = 'yellow';
-            else if (r > 200 && g < 100 && b > 200) colorName = 'purple';
-            desc = `${colorName} ${desc}`;
-          }
-        }
-        if (shape.type === 'rectangle' || shape.type === 'diamond') {
-          desc += ` (${Math.round(shape.width)}x${Math.round(shape.height)})`;
-        } else if (shape.type === 'circle') {
-          desc += ` (radius: ${Math.round(shape.radiusX)})`;
-        } else if (shape.type === 'text') {
-          desc += ` ("${shape.text}")`;
-        }
-        desc += ` at position (${Math.round(shape.x)}, ${Math.round(shape.y)})`;
-        return desc;
-      }).join(', ');
-      
-      contextPrompt += `\n\n**IMPORTANT CONTEXT:**
-The user currently has ${context.selectedShapes.length} shape(s) selected: ${shapeDescriptions}
-
-When the user refers to:
-- "this shape", "this", "it", "the shape"
-- "the selected shape", "selected"
-- "these shapes", "them", "the shapes"
-
-They are referring to the CURRENTLY SELECTED SHAPES listed above.
-
-For operations on these shapes, use target: "selected" in your operations.
-
-Examples with selected shapes:
-User: "move it to the center" → Use target: "selected"
-User: "double the size" → Use target: "selected"
-User: "rotate this 45 degrees" → Use target: "selected"
-User: "make it red" → Change fillColor of target: "selected"`;
-    }
-    
-    // Build messages array
-    const messages = [
-      { role: 'system', content: contextPrompt },
-      ...conversationHistory,
-      { role: 'user', content: userMessage },
-    ];
-    
-    // Call OpenAI API
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini', // Using gpt-4o-mini for faster responses and lower cost
-      messages,
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-      max_tokens: 2000,
+    // Call backend API instead of OpenAI directly
+    const response = await fetch(AI_CHAT_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userMessage,
+        conversationHistory,
+        context,
+      }),
     });
-    
-    const responseText = completion.choices[0].message.content;
-    const parsedResponse = JSON.parse(responseText);
-    
-    // Validate response structure
-    if (!parsedResponse.operations || !Array.isArray(parsedResponse.operations)) {
-      throw new Error('Invalid response format from AI');
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to process command');
     }
-    
-    return {
-      success: true,
-      operations: parsedResponse.operations,
-      message: parsedResponse.message || 'Command processed successfully.',
-      usage: completion.usage,
-    };
+
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('Error parsing command with AI:', error);
     
@@ -276,41 +46,6 @@ User: "make it red" → Change fillColor of target: "selected"`;
       operations: [],
       message: `Sorry, I encountered an error: ${error.message}`,
     };
-  }
-}
-
-/**
- * Get a conversational response (for general questions, not commands)
- * @param {string} userMessage - User's message
- * @param {Array} conversationHistory - Previous messages
- * @returns {Promise<string>} - AI's response
- */
-export async function getConversationalResponse(userMessage, conversationHistory = []) {
-  try {
-    const client = getOpenAIClient();
-    
-    const messages = [
-      {
-        role: 'system',
-        content: `You are a helpful AI assistant for a collaborative canvas application. 
-        You can help users create and manipulate shapes. If the user asks a question or 
-        needs help, respond conversationally. If they give a command, parse it into operations.`,
-      },
-      ...conversationHistory,
-      { role: 'user', content: userMessage },
-    ];
-    
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.7,
-      max_tokens: 500,
-    });
-    
-    return completion.choices[0].message.content;
-  } catch (error) {
-    console.error('Error getting conversational response:', error);
-    return "Sorry, I'm having trouble connecting to the AI service right now.";
   }
 }
 
@@ -335,11 +70,12 @@ export function isCommand(message) {
 }
 
 /**
- * Validate API key
- * @returns {boolean} - True if API key is configured
+ * Validate API key configuration
+ * @returns {boolean} - True if API key is configured (always true for backend setup)
  */
 export function isAPIKeyConfigured() {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  return apiKey && apiKey !== 'your-openai-api-key-here';
+  // With the backend approach, the API key is always "configured" from the frontend's perspective
+  // The backend will handle the actual API key validation
+  return true;
 }
 

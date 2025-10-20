@@ -28,13 +28,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Set persistence to session on initial load
+  useEffect(() => {
+    setPersistence(auth, browserSessionPersistence).catch((error) => {
+      console.error('Failed to set auth persistence:', error);
+    });
+  }, []);
+
   // Sign up with email, password, and display name
   async function signup(email, password, displayName) {
     try {
       setError(null);
-      
-      // Set persistence to session (logs out when browser closes)
-      await setPersistence(auth, browserSessionPersistence);
       
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -72,9 +76,6 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     try {
       setError(null);
-      
-      // Set persistence to session (logs out when browser closes)
-      await setPersistence(auth, browserSessionPersistence);
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;

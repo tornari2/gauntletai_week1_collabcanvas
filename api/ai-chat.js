@@ -43,7 +43,7 @@ Operations:
 5. DELETE: {type: "delete", target: "selected"}
 6. DUPLICATE: {type: "duplicate", target: "selected"}
 7. CUSTOMIZE: {type: "customize", target: "selected", fillColor/borderColor/strokeWidth/borderStyle/fillOpacity/...}
-8. GRID: {type: "grid", shape: "...", rows: number, cols: number, spacing: number}
+8. GRID: {type: "grid", shape: "rectangle|circle|diamond", rows: number, columns: number, spacing: number, shapeProperties: {fillColor, borderColor, ...}}
 9. ARRANGE: {type: "arrange", target: "selected", direction: "horizontal|vertical", spacing: number}
 10. COMPLEX: {type: "complex", template: "login-form|navigation-bar|card-layout|button-group"}
 
@@ -55,6 +55,15 @@ SPACING RULES (especially for arrows):
 - Space multiple shapes 150-200px apart horizontally/vertically
 - NEVER use same x,y for multiple shapes
 - Example: 3 arrows → x: 200, x: 400, x: 600 (200px apart)`;
+
+const GRID_EXAMPLES = `
+GRID OPERATION EXAMPLES:
+
+"Create a 3x3 grid of blue squares" → {"operations": [{"type": "grid", "shape": "rectangle", "rows": 3, "columns": 3, "spacing": 20, "shapeProperties": {"fillColor": "blue", "borderColor": "darkblue", "strokeWidth": 2}}], "message": "Created 3x3 grid of blue squares."}
+
+"Make a 2x4 grid of red circles" → {"operations": [{"type": "grid", "shape": "circle", "rows": 2, "columns": 4, "spacing": 30, "shapeProperties": {"fillColor": "red", "borderColor": "darkred"}}], "message": "Created 2x4 grid of red circles."}
+
+CRITICAL: Grid operations require "columns" (NOT "cols")!`;
 
 const FINAL_REMINDER = `
 🚨 FINAL REMINDER 🚨
@@ -71,6 +80,8 @@ ${SHAPE_TYPES}
 ${OPERATIONS}
 
 ${SPACING_RULES}
+
+${GRID_EXAMPLES}
 
 ${FINAL_REMINDER}`;
 

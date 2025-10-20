@@ -3,7 +3,9 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  setPersistence,
+  browserSessionPersistence
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
@@ -30,6 +32,9 @@ export function AuthProvider({ children }) {
   async function signup(email, password, displayName) {
     try {
       setError(null);
+      
+      // Set persistence to session (logs out when browser closes)
+      await setPersistence(auth, browserSessionPersistence);
       
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -67,6 +72,10 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     try {
       setError(null);
+      
+      // Set persistence to session (logs out when browser closes)
+      await setPersistence(auth, browserSessionPersistence);
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 

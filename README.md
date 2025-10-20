@@ -1,10 +1,10 @@
-# CollabCanvas
+# FlowCanvas
 
 A real-time collaborative whiteboard application with AI-powered features that enables multiple users to draw, manipulate shapes, and see each other's cursors in real-time with intelligent conflict resolution.
 
 ## 🎨 Overview
 
-CollabCanvas is a modern, web-based collaborative design tool built with React, Firebase, and OpenAI. It provides a shared canvas where teams can work together in real-time with robust conflict resolution to prevent simultaneous editing conflicts.
+FlowCanvas is a modern, web-based collaborative design tool built with React, Firebase, and OpenAI. It provides a shared canvas where teams can work together in real-time with robust conflict resolution to prevent simultaneous editing conflicts.
 
 ## ✨ Features
 

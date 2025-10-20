@@ -104,6 +104,24 @@ export function AIProvider({ children }) {
             responseContent += `\n\nModified ${executionResult.modifiedShapes.length} shape(s).`;
           }
 
+          // Select the created or modified shapes so they appear in the customization panel
+          if (executionResult.createdShapes.length > 0) {
+            // Select newly created shapes
+            const shapeIds = executionResult.createdShapes.map(s => s.id);
+            console.log('[AI] Selecting created shapes:', shapeIds, 'shapes:', executionResult.createdShapes);
+            if (shapeIds.length === 1) {
+              canvasContext.selectShape(shapeIds[0]);
+              console.log('[AI] Selected single shape:', shapeIds[0]);
+            } else if (shapeIds.length > 1) {
+              canvasContext.selectShapes(shapeIds);
+              console.log('[AI] Selected multiple shapes:', shapeIds);
+            }
+          } else if (executionResult.modifiedShapes.length > 0) {
+            // Keep modified shapes selected (they should already be selected)
+            // No need to change selection as they were the selected shapes being modified
+            console.log('[AI] Modified shapes (already selected):', executionResult.modifiedShapes);
+          }
+
           // Add AI response to chat
           const aiMsg = {
             role: 'assistant',
@@ -132,9 +150,11 @@ export function AIProvider({ children }) {
 • "Create a red circle at the center"
 • "Make a 3x3 grid of blue squares"
 • "Create a login form"
-• "Move the red rectangle to position 500, 300"
+• "Duplicate this" (select a shape first)
+• "Make it blue" (select a shape first)
+• "Move to the center" (select a shape first)
 
-What would you like me to create?`,
+What would you like me to do?`,
           timestamp: Date.now(),
         };
         setMessages(prev => [...prev, aiMsg]);

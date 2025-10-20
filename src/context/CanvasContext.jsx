@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../utils/firebase';
 import { COLLECTIONS, GLOBAL_CANVAS_ID } from '../utils/constants';
@@ -23,6 +23,9 @@ export function CanvasProvider({ children }) {
   const [creatingDiamond, setCreatingDiamond] = useState(false);
   const [creatingCircle, setCreatingCircle] = useState(false);
   const [creatingArrow, setCreatingArrow] = useState(false);
+  
+  // Ref for the Konva stage (to be set by Canvas component)
+  const stageRef = useRef(null);
   
   // Customization settings that persist across shape creation
   const [fillColor, setFillColor] = useState('#808080'); // Default gray
@@ -320,6 +323,7 @@ export function CanvasProvider({ children }) {
     updateShapes,
     sendToFront,
     sendToBack,
+    stageRef,
   };
 
   return (

@@ -20,6 +20,38 @@
   color: #333;
 }
 
+.viewport-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.viewport-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.viewport-label {
+  font-weight: 600;
+  color: #555;
+}
+
+.viewport-value {
+  font-family: 'Monaco', 'Courier New', monospace;
+  color: #333;
+  background-color: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
 .editing-indicator {
   margin-bottom: 12px;
   padding: 6px 10px;

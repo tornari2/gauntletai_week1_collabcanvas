@@ -95,6 +95,14 @@ function Legend() {
               <span>Multi-select</span>
             </div>
           </div>
+
+          <div className="legend-section">
+            <h4>AI Assistant</h4>
+            <div className="legend-item">
+              <kbd>A</kbd>
+              <span>Toggle AI panel</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

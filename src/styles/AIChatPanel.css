@@ -11,47 +11,23 @@
   pointer-events: none;
 }
 
+/* Keyboard key styling */
+kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #333;
+  background: linear-gradient(to bottom, #f9f9f9 0%, #e3e3e3 100%);
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  margin: 0 2px;
+}
+
 .ai-chat-panel * {
   pointer-events: auto;
-}
-
-/* Toggle Button */
-.ai-chat-toggle {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 12px 0 0 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
-  box-shadow: -2px 2px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 1001;
-}
-
-.ai-chat-toggle:hover {
-  transform: translateY(-50%) translateX(-4px);
-  box-shadow: -4px 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.ai-chat-toggle .ai-icon {
-  font-size: 20px;
-}
-
-.ai-chat-toggle .ai-label {
-  font-size: 14px;
-}
-
-.ai-chat-panel.open .ai-chat-toggle {
-  display: none;
 }
 
 /* Chat Container */

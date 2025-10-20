@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useCanvas } from '../context/CanvasContext'
+import { useCanvasViewport } from '../context/CanvasViewportContext'
 import { hexToHue, hueToRgba, rgbaToHex } from '../utils/colorUtils'
 import '../styles/CustomizationPanel.css'
 
@@ -32,6 +33,8 @@ function CustomizationPanel() {
     sendToFront,
     sendToBack
   } = useCanvas()
+  
+  const { zoom, cursorPosition } = useCanvasViewport()
 
   // Local state for editing - hue value 0-360
   const [localHue, setLocalHue] = useState(0)
@@ -276,7 +279,16 @@ function CustomizationPanel() {
 
   return (
     <div className="customization-panel">
-      <h3>Customization Panel</h3>
+      <div className="viewport-info">
+        <div className="viewport-info-item">
+          <span className="viewport-label">Zoom:</span>
+          <span className="viewport-value">{Math.round(zoom * 100)}%</span>
+        </div>
+        <div className="viewport-info-item">
+          <span className="viewport-label">Cursor:</span>
+          <span className="viewport-value">({cursorPosition.x}, {cursorPosition.y})</span>
+        </div>
+      </div>
       
       <div className="control-group">
         <label htmlFor="color-slider">

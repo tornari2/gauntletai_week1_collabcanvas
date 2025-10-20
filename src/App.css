@@ -88,9 +88,25 @@ p {
   border-top: 1px solid #ddd;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   z-index: 100; /* Z_INDEX.TOOLBAR */
+  padding: 0 20px;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .toolbar-button {
@@ -143,6 +159,9 @@ p {
   background-color: #ffffff;
   border-color: #dc3545;
   color: #dc3545;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 8px;
 }
 
 .toolbar-button.clear-canvas-button:hover {
@@ -163,6 +182,50 @@ p {
   background-color: #f8f9fa;
   transform: none;
   box-shadow: none;
+}
+
+.toolbar-button.legend-button,
+.toolbar-button.export-button {
+  background-color: #ffffff;
+  border-color: #6c757d;
+  color: #6c757d;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 8px;
+}
+
+.toolbar-button.legend-button:hover,
+.toolbar-button.export-button:hover:not(:disabled) {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  color: #ffffff;
+}
+
+.toolbar-button.export-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-button.ai-assistant-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: #ffffff;
+}
+
+.toolbar-button.ai-assistant-button:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #65408b 100%);
+  border-color: #5568d3;
+}
+
+.toolbar-button.ai-assistant-button.active {
+  background: linear-gradient(135deg, #4a56b6 0%, #543774 100%);
+  border-color: #4a56b6;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+}
+
+.toolbar-button.ai-assistant-button .ai-icon {
+  font-size: 20px;
+  line-height: 1;
 }
 
 /* User List will be positioned at top-right */

@@ -3,10 +3,15 @@ import { useAI } from '../context/AIContext';
 import '../styles/AIChatPanel.css';
 
 function AIChatPanel() {
-  const { messages, isProcessing, isPanelOpen, togglePanel, sendMessage } = useAI();
+  const { messages, isProcessing, isPanelOpen, togglePanel, sendMessage, clearMessages } = useAI();
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  const handleClose = () => {
+    clearMessages();
+    togglePanel();
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -47,10 +52,10 @@ function AIChatPanel() {
   };
 
   const exampleCommands = [
+    "Create a short poem",
     "Create a red circle at the center",
     "Make a 3x3 grid of blue squares",
-    "Create a login form",
-    "Add text that says 'Hello World'",
+    "Make a login form",
   ];
 
   const handleExampleClick = (command) => {
@@ -62,16 +67,6 @@ function AIChatPanel() {
 
   return (
     <div className={`ai-chat-panel ${isPanelOpen ? 'open' : ''}`}>
-      {/* Toggle Button */}
-      <button 
-        className="ai-chat-toggle"
-        onClick={togglePanel}
-        title={isPanelOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
-      >
-        <span className="ai-icon">🤖</span>
-        {!isPanelOpen && <span className="ai-label">AI Assistant</span>}
-      </button>
-
       {/* Chat Panel */}
       {isPanelOpen && (
         <div className="ai-chat-container">
@@ -83,7 +78,7 @@ function AIChatPanel() {
             </div>
             <button 
               className="ai-close-btn"
-              onClick={togglePanel}
+              onClick={handleClose}
               title="Close"
             >
               ✕
@@ -110,15 +105,11 @@ function AIChatPanel() {
                   ))}
                 </div>
 
-                <div className="ai-capabilities">
-                  <p className="ai-capabilities-title">I can:</p>
+                <div className="ai-capabilities" style={{marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '15px'}}>
+                  <p className="ai-capabilities-title">💡 Tips:</p>
                   <ul>
-                    <li>✨ Create shapes (rectangles, circles, diamonds, text, arrows)</li>
-                    <li>🎯 Move and position shapes</li>
-                    <li>📏 Resize and rotate shapes</li>
-                    <li>🎨 Change colors and styles</li>
-                    <li>📐 Create grids and layouts</li>
-                    <li>🏗️ Build complex UI components</li>
+                    <li>📌 <strong>To modify existing shapes:</strong> Select them on the canvas first, then tell me what to change</li>
+                    <li>🔄 <strong>Start a new chat:</strong> Close this window (click ✕) to clear the conversation history</li>
                   </ul>
                 </div>
               </div>

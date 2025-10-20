@@ -6,6 +6,7 @@ import Z_INDEX from '../utils/zIndex'
 import { useCanvas } from '../context/CanvasContext'
 import { useAuth } from '../context/AuthContext'
 import { usePresence } from '../context/PresenceContext'
+import { useCanvasViewport } from '../context/CanvasViewportContext'
 import { useCursorSync } from '../hooks/useCursorSync'
 import { useShapePreviewSync } from '../hooks/useShapePreviewSync'
 import { usePresenceManager } from '../hooks/usePresence'
@@ -266,6 +267,15 @@ const ArrowShape = memo(({
   // Use shape's stored strokeWidth or default
   const strokeWidth = shape.strokeWidth || SHAPE_DEFAULTS.DEFAULT_STROKE_WIDTH
 
+  // Calculate bounding box for the arrow to help Transformer
+  const [x1, y1, x2, y2] = shape.points
+  const minX = Math.min(x1, x2)
+  const maxX = Math.max(x1, x2)
+  const minY = Math.min(y1, y2)
+  const maxY = Math.max(y1, y2)
+  const width = maxX - minX
+  const height = maxY - minY
+
   return (
     <Group
       id={`shape-${shape.id}`}
@@ -294,7 +304,17 @@ const ArrowShape = memo(({
         }
       }}
     >
-      {/* Actual shape */}
+      {/* Invisible rect to help Transformer calculate bounds */}
+      <Rect
+        x={minX}
+        y={minY}
+        width={Math.max(width, 1)}
+        height={Math.max(height, 1)}
+        fill="transparent"
+        listening={false}
+      />
+      
+      {/* Actual arrow shape */}
       <Arrow
         points={shape.points}
         stroke={shape.borderColor}
@@ -304,7 +324,6 @@ const ArrowShape = memo(({
         hitStrokeWidth={20}
         listening={true}
         perfectDrawEnabled={false}
-        strokeScaleEnabled={false}
         pointerLength={strokeWidth * 5}
         pointerWidth={strokeWidth * 5}
       />
@@ -428,7 +447,6 @@ const TextShape = memo(({
 
 function Canvas() {
   const containerRef = useRef(null)
-  const stageRef = useRef(null)
   const transformerRef = useRef(null)
   const selectedShapeRef = useRef(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
@@ -436,6 +454,7 @@ function Canvas() {
   const [stageScale, setStageScale] = useState(1)
   const isPanning = useRef(false)
   const lastCursorPos = useRef({ x: 0, y: 0 }) // Track cursor position for duplication
+  const lastScreenMousePos = useRef({ x: 0, y: 0 }) // Track screen mouse position for pan updates
   
   // Canvas context and auth
   const { 
@@ -447,6 +466,7 @@ function Canvas() {
     creatingDiamond,
     setCreatingDiamond,
     creatingCircle,
+    stageRef,
     setCreatingCircle,
     creatingArrow,
     setCreatingArrow,
@@ -475,6 +495,27 @@ function Canvas() {
   const { syncCursorPosition } = useCursorSync()
   const { syncShapePreview, clearShapePreview } = useShapePreviewSync()
   const { syncTransform, clearTransform } = useTransformSync()
+  
+  // Viewport state for CustomizationPanel
+  const { updateZoom, updateCursorPosition } = useCanvasViewport()
+
+  // Helper function to update cursor position in canvas coordinates
+  const updateCursorFromScreenPos = useCallback(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    
+    const screenX = lastScreenMousePos.current.x
+    const screenY = lastScreenMousePos.current.y
+    
+    // Convert screen position to canvas coordinates
+    const canvasPos = {
+      x: (screenX - stage.x()) / stage.scaleX(),
+      y: (screenY - stage.y()) / stage.scaleY()
+    }
+    
+    lastCursorPos.current = canvasPos
+    updateCursorPosition(canvasPos.x, canvasPos.y)
+  }, [updateCursorPosition])
 
   // Helper function to check if a shape is locked by another user
   const isShapeLockedByOtherUser = useCallback((shapeId) => {
@@ -506,10 +547,15 @@ function Canvas() {
         // Add to recently transformed set
         recentlyTransformedShapes.current.add(shapeId)
         
-        // Store the current transform state
-        newLastStates[shapeId] = {
-          userId,
-          transform
+        // Store the current transform state with a snapshot of the shape
+        // This prevents issues with stale shape data during the buffer period
+        const shape = shapes.find(s => s.id === shapeId)
+        if (shape) {
+          newLastStates[shapeId] = {
+            userId,
+            transform,
+            shapeSnapshot: { ...shape } // Store complete shape snapshot
+          }
         }
         
         // Clear any existing cleanup timer for this shape
@@ -526,9 +572,7 @@ function Canvas() {
       })
       
       if (!isStillTransforming) {
-        // Wait 200ms after transform ends before removing from the set
-        // This prevents flicker when Firestore update arrives
-        // Increased from 150ms to 200ms for more reliable sync
+        // Wait until the shape has been updated by Firestore, or 500ms max (fallback)
         const timer = setTimeout(() => {
           recentlyTransformedShapes.current.delete(shapeId)
           transformCleanupTimers.current.delete(shapeId)
@@ -537,7 +581,7 @@ function Canvas() {
             delete updated[shapeId]
             return updated
           })
-        }, 200)
+        }, 500) // Increased to 500ms for more reliable sync
         
         transformCleanupTimers.current.set(shapeId, timer)
       }
@@ -584,11 +628,26 @@ function Canvas() {
       
       return !(shapeRight < boxLeft || shapeLeft > boxRight || shapeBottom < boxTop || shapeTop > boxBottom)
     } else if (shape.type === 'arrow') {
-      // Check if any point of the line is within box
+      // Arrow points are relative to shape.x and shape.y, so convert to absolute coordinates
       const [x1, y1, x2, y2] = shape.points
-      const point1In = x1 >= boxLeft && x1 <= boxRight && y1 >= boxTop && y1 <= boxBottom
-      const point2In = x2 >= boxLeft && x2 <= boxRight && y2 >= boxTop && y2 <= boxBottom
-      return point1In || point2In
+      const absX1 = shape.x + x1
+      const absY1 = shape.y + y1
+      const absX2 = shape.x + x2
+      const absY2 = shape.y + y2
+      
+      // Check if any point of the arrow is within the box
+      const point1In = absX1 >= boxLeft && absX1 <= boxRight && absY1 >= boxTop && absY1 <= boxBottom
+      const point2In = absX2 >= boxLeft && absX2 <= boxRight && absY2 >= boxTop && absY2 <= boxBottom
+      
+      // Also check if the arrow's bounding box overlaps with the selection box
+      const arrowLeft = Math.min(absX1, absX2)
+      const arrowRight = Math.max(absX1, absX2)
+      const arrowTop = Math.min(absY1, absY2)
+      const arrowBottom = Math.max(absY1, absY2)
+      
+      const boundingBoxOverlaps = !(arrowRight < boxLeft || arrowLeft > boxRight || arrowBottom < boxTop || arrowTop > boxBottom)
+      
+      return point1In || point2In || boundingBoxOverlaps
     } else if (shape.type === 'text') {
       // For text, just check if the text position is within the box
       // This is simple but works for most cases
@@ -910,6 +969,9 @@ function Canvas() {
         }
         
         stage.batchDraw()
+        
+        // Update cursor position after panning
+        updateCursorFromScreenPos()
       }
       
       // Number keys 1-4 for shape mode selection (toggle on/off)
@@ -966,7 +1028,7 @@ function Canvas() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedShapeId, selectedShapeIds, shapes, deleteShape, deleteShapes, addShape, selectShape, selectShapes, currentUser, clipboard, setCreatingRectangle, setCreatingDiamond, setCreatingCircle, setCreatingArrow, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow])
+  }, [selectedShapeId, selectedShapeIds, shapes, deleteShape, deleteShapes, addShape, selectShape, selectShapes, currentUser, clipboard, setCreatingRectangle, setCreatingDiamond, setCreatingCircle, setCreatingArrow, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow, updateCursorFromScreenPos])
 
   // Track cursor position and sync to Firestore
   useEffect(() => {
@@ -1030,11 +1092,11 @@ function Canvas() {
     // Don't show transformer when editing text
     if (editingTextId) {
       transformer.nodes([])
-      transformer.getLayer().batchDraw()
+      transformer.getLayer()?.batchDraw()
       return
     }
     
-    // Handle multi-select
+    // Handle multi-select - single bounding box around all shapes
     if (selectedShapeIds.length > 0) {
       const stage = stageRef.current
       if (!stage) return
@@ -1049,7 +1111,11 @@ function Canvas() {
       
       if (selectedNodes.length > 0) {
         transformer.nodes(selectedNodes)
-        transformer.getLayer().batchDraw()
+        // Force the transformer to recalculate bounds
+        const layer = transformer.getLayer()
+        if (layer) {
+          layer.batchDraw()
+        }
         transformer.forceUpdate()
       }
     }
@@ -1058,14 +1124,17 @@ function Canvas() {
       const selectedNode = selectedShapeRef.current
       if (selectedNode) {
         transformer.nodes([selectedNode])
-        transformer.getLayer().batchDraw()
+        const layer = transformer.getLayer()
+        if (layer) {
+          layer.batchDraw()
+        }
         transformer.forceUpdate()
       }
     }
     // No selection
     else {
       transformer.nodes([])
-      transformer.getLayer().batchDraw()
+      transformer.getLayer()?.batchDraw()
     }
   }, [selectedShapeId, selectedShapeIds, shapes, editingTextId])
 
@@ -1077,14 +1146,22 @@ function Canvas() {
     }
     
     isDragging.current = true
-    // Select the shape being dragged
-    selectShape(shapeId)
+    
+    // Only select the shape if it's not already part of a multi-selection
+    // This preserves multi-selection when dragging one of the selected shapes
+    if (!selectedShapeIds.includes(shapeId) && selectedShapeId !== shapeId) {
+      selectShape(shapeId)
+    }
+    
     // Disable panning while dragging shape
     isPanning.current = false
-  }, [selectShape, isShapeLockedByOtherUser])
+  }, [selectShape, isShapeLockedByOtherUser, selectedShapeIds, selectedShapeId])
 
   const handleShapeDragMove = useCallback((shapeId, e) => {
     if (!isDragging.current) return
+    
+    const stage = stageRef.current
+    if (!stage) return
     
     const node = e.target
     const newX = node.x()
@@ -1099,6 +1176,24 @@ function Canvas() {
     
     const deltaX = newX - draggedShape.x
     const deltaY = newY - draggedShape.y
+    
+    // Update visual positions of all other selected shapes immediately for smooth dragging
+    if (shapesToMove.length > 1) {
+      const layer = stage.findOne('Layer')
+      if (layer) {
+        shapesToMove.forEach(id => {
+          if (id !== shapeId) { // Don't move the dragged shape again
+            const shape = shapes.find(s => s.id === id)
+            const shapeNode = layer.findOne(`#shape-${id}`)
+            if (shape && shapeNode) {
+              shapeNode.x(shape.x + deltaX)
+              shapeNode.y(shape.y + deltaY)
+            }
+          }
+        })
+        layer.batchDraw()
+      }
+    }
     
     // Broadcast transform in real-time for instant sync
     syncTransform({
@@ -1377,9 +1472,11 @@ function Canvas() {
           updates.points = scaledPoints
           nodesToUpdate.push({ groupNode, shapeNode, type: 'arrow', points: scaledPoints })
         } else if (shape.type === 'text') {
-          updates.scaleX = (shape.scaleX || 1) * scaleX
-          updates.scaleY = (shape.scaleY || 1) * scaleY
-          nodesToUpdate.push({ groupNode, type: 'text' })
+          // For text, we need to store the scale but reset the group scale
+          // to prevent compounding on subsequent transforms
+          updates.scaleX = scaleX
+          updates.scaleY = scaleY
+          nodesToUpdate.push({ groupNode, type: 'text', scaleX, scaleY })
         }
       }
       
@@ -1388,22 +1485,35 @@ function Canvas() {
     
     // PHASE 2: Apply all dimension changes and reset scales in a single batch
     // This prevents visual flicker and incorrect bounding box calculations
-    nodesToUpdate.forEach(({ groupNode, shapeNode, type, width, height, radiusX, radiusY, points }) => {
-      // Reset group scale first
-      groupNode.scaleX(1)
-      groupNode.scaleY(1)
-      
+    nodesToUpdate.forEach(({ groupNode, shapeNode, type, width, height, radiusX, radiusY, points, scaleX, scaleY }) => {
       // Apply new dimensions directly to the shape node
       if (type === 'rectangle' && shapeNode) {
+        // Reset group scale first
+        groupNode.scaleX(1)
+        groupNode.scaleY(1)
         shapeNode.width(width)
         shapeNode.height(height)
       } else if (type === 'circle' && shapeNode) {
+        // Reset group scale first
+        groupNode.scaleX(1)
+        groupNode.scaleY(1)
         shapeNode.radiusX(radiusX)
         shapeNode.radiusY(radiusY)
       } else if (type === 'arrow' && shapeNode) {
+        // Reset group scale first
+        groupNode.scaleX(1)
+        groupNode.scaleY(1)
         shapeNode.points(points)
+      } else if (type === 'text') {
+        // For text, reset the group scale to 1 to prevent compounding
+        groupNode.scaleX(1)
+        groupNode.scaleY(1)
       }
-      // Note: diamond and text don't need shape node updates
+      // Note: diamond doesn't need shape node updates, just scale reset
+      if (type === 'diamond') {
+        groupNode.scaleX(1)
+        groupNode.scaleY(1)
+      }
     })
     
     // Force a complete redraw of the layer
@@ -1552,6 +1662,11 @@ function Canvas() {
 
   const handleMouseUp = useCallback(() => {
     const stage = stageRef.current
+    
+    // Clear selection box if it's still showing
+    if (selectionBox) {
+      setSelectionBox(null)
+    }
     
     // If we were dragging multi-select group from white space, finalize
     if (isDragging.current && selectedShapeIds.length > 0 && groupDragStart.current) {
@@ -1781,7 +1896,7 @@ function Canvas() {
     }
     
     isPanning.current = false
-  }, [isDrawing, startPos, addShape, currentUser, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow, shapes, isShapeInSelectionBox, selectShapes, fillColor, fillOpacity, borderThickness, borderStyle, clearShapePreview, broadcastShape, isShapeLockedByOtherUser, updateShape, clearTransform, selectedShapeIds])
+  }, [isDrawing, startPos, addShape, currentUser, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow, shapes, isShapeInSelectionBox, selectShapes, fillColor, fillOpacity, borderThickness, borderStyle, clearShapePreview, broadcastShape, isShapeLockedByOtherUser, updateShape, clearTransform, selectedShapeIds, selectionBox])
 
   const handleMouseMove = useCallback((e) => {
     const stage = stageRef.current
@@ -1790,11 +1905,17 @@ function Canvas() {
     // Always track cursor position in canvas coordinates for duplication
     const pos = stage.getPointerPosition()
     if (pos) {
+      // Store screen position for pan updates
+      lastScreenMousePos.current = { x: pos.x, y: pos.y }
+      
       const canvasPos = {
         x: (pos.x - stage.x()) / stage.scaleX(),
         y: (pos.y - stage.y()) / stage.scaleY()
       }
       lastCursorPos.current = canvasPos
+      
+      // Update viewport context for CustomizationPanel
+      updateCursorPosition(canvasPos.x, canvasPos.y)
     }
     
     // If dragging multi-select group from white space, update positions
@@ -1959,8 +2080,11 @@ function Canvas() {
       stage.x(stage.x() + e.evt.movementX)
       stage.y(stage.y() + e.evt.movementY)
       stage.batchDraw()
+      
+      // Recalculate cursor position in canvas coordinates after panning
+      updateCursorFromScreenPos()
     }
-  }, [isDrawing, startPos, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow, fillColor, fillOpacity, borderThickness, borderStyle, syncShapePreview, shapes, selectedShapeIds, syncTransform])
+  }, [isDrawing, startPos, creatingRectangle, creatingDiamond, creatingCircle, creatingArrow, fillColor, fillOpacity, borderThickness, borderStyle, syncShapePreview, shapes, selectedShapeIds, syncTransform, updateCursorPosition, updateCursorFromScreenPos])
 
   // Zoom functionality: Mouse wheel zooms toward cursor position
   const handleWheel = useCallback((e) => {
@@ -2001,7 +2125,10 @@ function Canvas() {
     stage.x(newPos.x)
     stage.y(newPos.y)
     stage.batchDraw()
-  }, [])
+    
+    // Update viewport context for CustomizationPanel
+    updateZoom(newScale)
+  }, [updateZoom])
 
   // Handle shape click for selection
   const handleShapeClick = useCallback((shapeId, e) => {
@@ -2011,10 +2138,12 @@ function Canvas() {
       return
     }
     
-    // Clear any drawing state
+    // Clear any drawing state and selection box
     setIsDrawing(false)
     setStartPos(null)
     setPreviewRect(null)
+    setSelectionBox(null)
+    isSelectingRef.current = false
     // Deactivate all creation modes
     setCreatingRectangle(false)
     setCreatingDiamond(false)
@@ -2275,17 +2404,26 @@ function Canvas() {
             {shapes.map((shape) => {
               const isSelected = shape.id === selectedShapeId || selectedShapeIds.includes(shape.id)
               
-              // Check if this shape is being or was recently transformed by another user
-              const isBeingTransformedByOther = Object.entries(remoteTransforms).some(([userId, transform]) => {
+              // Check if this shape is being actively transformed by another user
+              // AND if a ghost will actually be rendered for it
+              const activeTransform = Object.entries(remoteTransforms).find(([userId, transform]) => {
                 return userId !== currentUser?.uid && transform.shapeIds.includes(shape.id)
               })
               
-              // Also check if it was recently transformed (within the cleanup delay)
-              const wasRecentlyTransformed = recentlyTransformedShapes.current.has(shape.id)
+              // Only hide if transform exists AND ghost will be rendered
+              // Ghost is NOT rendered for multi-select rotate/resize
+              const isBeingTransformedWithGhost = activeTransform && 
+                !(activeTransform[1].type === 'transform' && activeTransform[1].shapeIds.length > 1)
               
-              // Completely hide the shape if it's being actively or recently transformed by someone else
-              // (we'll show the ghost instead)
-              if (isBeingTransformedByOther || wasRecentlyTransformed) {
+              // Check if there's a ghost shape being shown for this (from lastTransformStates)
+              // IMPORTANT: Only hide if a ghost is ACTUALLY being rendered
+              // For multi-select transforms, we skip ghost rendering, so don't hide the real shape
+              const lastState = lastTransformStates[shape.id]
+              const hasGhostShape = lastState && !(lastState.transform.type === 'transform' && lastState.transform.shapeIds.length > 1)
+              
+              // Only hide the real shape if a ghost is actually being rendered
+              // This prevents flicker when the transform ends but before Firestore updates
+              if (isBeingTransformedWithGhost || hasGhostShape) {
                 return null
               }
               
@@ -2398,7 +2536,7 @@ function Canvas() {
               return null
             })}
             
-            {/* Transformer for resizing and rotating selected shape */}
+            {/* Transformer for resizing and rotating selected shape(s) */}
             <Transformer
               ref={transformerRef}
               draggable={true}
@@ -2409,6 +2547,9 @@ function Canvas() {
               anchorStroke={userColor}
               anchorFill={userColor}
               anchorSize={8}
+              ignoreStroke={false}
+              useSingleNodeRotation={false}
+              flipEnabled={false}
               onDragStart={handleTransformerDragStart}
               onDragMove={handleTransformerDragMove}
               onDragEnd={handleTransformerDragEnd}
@@ -2638,9 +2779,19 @@ function Canvas() {
               if (userId === currentUser?.uid) return null
               if (!transform || !transform.shapeIds) return null
               
+              // For multi-select transforms (rotate/scale), don't show ghost shapes
+              // The math for properly transforming each shape relative to the group is complex
+              // and can cause visual issues. Only show ghosts for drag operations or single shapes.
+              if (transform.type === 'transform' && transform.shapeIds.length > 1) {
+                return null
+              }
+              
               // Render ghost shapes at their transformed positions
               return transform.shapeIds.map(shapeId => {
-                const shape = shapes.find(s => s.id === shapeId)
+                // Try to use the snapshot first (more accurate during buffer period)
+                // Otherwise fall back to current shape data
+                const lastState = lastTransformStates[shapeId]
+                const shape = lastState?.shapeSnapshot || shapes.find(s => s.id === shapeId)
                 if (!shape) return null
                 
                 const ghostOpacity = 0.5
@@ -2661,9 +2812,7 @@ function Canvas() {
                     rotation: shape.rotation || 0, // Preserve original rotation during drag
                   }
                 } else if (transform.type === 'transform') {
-                  // For transform (rotate/scale), calculate final dimensions
-                  // Apply scales directly to dimensions instead of using Konva's scale transform
-                  // This prevents flicker when transitioning from ghost to real shape
+                  // For transform (rotate/scale) - only single shapes at this point
                   const scaleX = transform.scaleX || 1
                   const scaleY = transform.scaleY || 1
                   
@@ -2774,6 +2923,49 @@ function Canvas() {
                       pointerWidth={shape.strokeWidth * 5}
                     />
                   )
+                } else if (shape.type === 'text') {
+                  // Convert font size to pixels if it's a string
+                  const getFontSizePixels = (sizeStr) => {
+                    if (typeof sizeStr === 'number') return sizeStr
+                    switch (sizeStr) {
+                      case 'small': return 18
+                      case 'medium': return 24
+                      case 'large': return 32
+                      default: return 24
+                    }
+                  }
+                  
+                  const fontSizePixels = getFontSizePixels(shape.fontSize || 'medium')
+                  const shapeFontWeight = shape.fontWeight || 'normal'
+                  const shapeFontStyle = shape.fontStyle || 'normal'
+                  
+                  // Combine fontStyle and fontWeight for Konva
+                  let combinedFontStyle = ''
+                  if (shapeFontStyle === 'italic') {
+                    combinedFontStyle = shapeFontWeight === 'bold' ? 'italic bold' : 'italic'
+                  } else {
+                    combinedFontStyle = shapeFontWeight === 'bold' ? 'bold' : 'normal'
+                  }
+                  
+                  return (
+                    <Text
+                      key={`transform-${userId}-${shapeId}`}
+                      {...transformedProps}
+                      scaleX={shape.scaleX || 1}
+                      scaleY={shape.scaleY || 1}
+                      text={shape.text}
+                      fontSize={fontSizePixels}
+                      fontFamily={shape.fontFamily || 'Arial'}
+                      fontStyle={combinedFontStyle}
+                      textDecoration={shape.textDecoration || 'none'}
+                      fill={shape.fillColor}
+                      stroke={transform.colorHex}
+                      strokeWidth={1}
+                      opacity={ghostOpacity}
+                      listening={false}
+                      perfectDrawEnabled={false}
+                    />
+                  )
                 }
                 
                 return null
@@ -2799,8 +2991,8 @@ function Canvas() {
                     return false
                   }
                   
-                  // Don't include if recently transformed (in buffer period)
-                  if (recentlyTransformedShapes.current.has(shape.id)) {
+                  // Don't include if there's a ghost shape being shown (during buffer period)
+                  if (lastTransformStates[shape.id] !== undefined) {
                     return false
                   }
                   
@@ -2881,18 +3073,37 @@ function Canvas() {
                     maxY: shape.y + shape.radiusY
                   }
                 } else if (shape.type === 'arrow') {
+                  // Arrow points are relative to shape.x and shape.y, so convert to absolute coordinates
                   const [x1, y1, x2, y2] = shape.points
+                  const absX1 = shape.x + x1
+                  const absY1 = shape.y + y1
+                  const absX2 = shape.x + x2
+                  const absY2 = shape.y + y2
+                  
                   return {
-                    minX: Math.min(x1, x2),
-                    maxX: Math.max(x1, x2),
-                    minY: Math.min(y1, y2),
-                    maxY: Math.max(y1, y2)
+                    minX: Math.min(absX1, absX2),
+                    maxX: Math.max(absX1, absX2),
+                    minY: Math.min(absY1, absY2),
+                    maxY: Math.max(absY1, absY2)
                   }
                 } else if (shape.type === 'text') {
-                  const fontSize = shape.fontSize || 20
+                  // Convert font size to pixels if it's a string
+                  const getFontSizePixels = (sizeStr) => {
+                    if (typeof sizeStr === 'number') return sizeStr
+                    switch (sizeStr) {
+                      case 'small': return 18
+                      case 'medium': return 24
+                      case 'large': return 32
+                      default: return 24
+                    }
+                  }
+                  
+                  const fontSize = getFontSizePixels(shape.fontSize) || 24
+                  const scaleX = shape.scaleX || 1
+                  const scaleY = shape.scaleY || 1
                   const textLength = (shape.text || '').length
-                  const width = Math.max(textLength * fontSize * 0.6, 50)
-                  const height = fontSize * 1.2
+                  const width = Math.max(textLength * fontSize * 0.6 * scaleX, 50)
+                  const height = fontSize * 1.2 * scaleY
                   
                   // For rotated text, calculate corners
                   const rotation = (shape.rotation || 0) * Math.PI / 180
@@ -2976,81 +3187,114 @@ function Canvas() {
       })}
       
       {/* Text editing input overlay - invisible, just for capturing keystrokes */}
-      {editingTextId && (
-        <input
-          ref={textInputRef}
-          type="text"
-          value={textInput}
-          onChange={(e) => {
-            const newValue = e.target.value
-            setTextInput(newValue)
-            // Update the text shape in real-time as user types
-            updateShape(editingTextId, { text: newValue })
-          }}
-          onBlur={(e) => {
-            // Capture the current value and editing ID to avoid stale closure
-            const currentValue = e.target.value
-            const shapeId = editingTextId
-            
-            // Use setTimeout to ensure state has updated before processing
-            setTimeout(() => {
-              // Save text when losing focus
-              if (currentValue.trim()) {
-                updateShape(shapeId, { text: currentValue })
-              } else {
-                // If empty, delete the text shape
-                deleteShape(shapeId)
-              }
-              setEditingTextId(null)
-              // Deselect the shape to prevent transformer from appearing
-              selectShape(null)
-            }, 0)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              // Save text on Enter
+      {editingTextId && (() => {
+        // Get the text shape being edited to match its styling
+        const editingShape = shapes.find(s => s.id === editingTextId)
+        const stage = stageRef.current
+        
+        // Calculate font size in pixels
+        const getFontSizePixels = (size) => {
+          switch (size) {
+            case 'small': return 16
+            case 'medium': return 24
+            case 'large': return 32
+            default: return 24
+          }
+        }
+        
+        // Get base font size and scale it by the canvas zoom level
+        const baseFontSize = editingShape ? getFontSizePixels(editingShape.fontSize) : 24
+        const currentScale = stage ? stage.scaleX() : 1
+        const inputFontSize = baseFontSize * currentScale
+        
+        const inputFontFamily = editingShape?.fontFamily || 'Arial'
+        const inputFontWeight = editingShape?.fontWeight || 'normal'
+        const inputFontStyle = editingShape?.fontStyle || 'normal'
+        const inputTextDecoration = editingShape?.textDecoration || 'none'
+        
+        return (
+          <input
+            ref={textInputRef}
+            type="text"
+            value={textInput}
+            spellCheck={false}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            onChange={(e) => {
+              const newValue = e.target.value
+              setTextInput(newValue)
+              // Update the text shape in real-time as user types
+              updateShape(editingTextId, { text: newValue })
+            }}
+            onBlur={(e) => {
+              // Capture the current value and editing ID to avoid stale closure
               const currentValue = e.target.value
-              if (currentValue.trim()) {
-                updateShape(editingTextId, { text: currentValue })
-              } else {
-                deleteShape(editingTextId)
+              const shapeId = editingTextId
+              
+              // Use setTimeout to ensure state has updated before processing
+              setTimeout(() => {
+                // Save text when losing focus
+                if (currentValue.trim()) {
+                  updateShape(shapeId, { text: currentValue })
+                } else {
+                  // If empty, delete the text shape
+                  deleteShape(shapeId)
+                }
+                setEditingTextId(null)
+                // Deselect the shape to prevent transformer from appearing
+                selectShape(null)
+              }, 0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                // Save text on Enter
+                const currentValue = e.target.value
+                if (currentValue.trim()) {
+                  updateShape(editingTextId, { text: currentValue })
+                } else {
+                  deleteShape(editingTextId)
+                }
+                setEditingTextId(null)
+                // Deselect the shape to prevent transformer from appearing
+                selectShape(null)
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                // Cancel editing on Escape - delete if it was empty initially
+                const shape = shapes.find(s => s.id === editingTextId)
+                if (!shape || !shape.text || shape.text.trim() === '') {
+                  deleteShape(editingTextId)
+                }
+                setEditingTextId(null)
+                // Deselect the shape to prevent transformer from appearing
+                selectShape(null)
               }
-              setEditingTextId(null)
-              // Deselect the shape to prevent transformer from appearing
-              selectShape(null)
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              // Cancel editing on Escape - delete if it was empty initially
-              const shape = shapes.find(s => s.id === editingTextId)
-              if (!shape || !shape.text || shape.text.trim() === '') {
-                deleteShape(editingTextId)
-              }
-              setEditingTextId(null)
-              // Deselect the shape to prevent transformer from appearing
-              selectShape(null)
-            }
-          }}
-          autoFocus
-          style={{
-            position: 'absolute',
-            left: `${textPosition.x}px`,
-            top: `${textPosition.y}px`,
-            fontSize: '24px',
-            fontFamily: 'Arial',
-            border: 'none',
-            padding: '0',
-            outline: 'none',
-            backgroundColor: 'transparent',
-            color: 'transparent',
-            caretColor: 'black',
-            zIndex: Z_INDEX.TEXT_INPUT,
-            minWidth: '500px',
-            cursor: 'text',
-            pointerEvents: 'auto'
-          }}
-        />
-      )}
+            }}
+            autoFocus
+            style={{
+              position: 'absolute',
+              left: `${textPosition.x}px`,
+              top: `${textPosition.y}px`,
+              fontSize: `${inputFontSize}px`,
+              fontFamily: inputFontFamily,
+              fontWeight: inputFontWeight,
+              fontStyle: inputFontStyle,
+              textDecoration: inputTextDecoration,
+              border: 'none',
+              padding: '0',
+              outline: 'none',
+              backgroundColor: 'transparent',
+              color: 'transparent',
+              caretColor: 'black',
+              zIndex: Z_INDEX.TEXT_INPUT,
+              minWidth: '500px',
+              cursor: 'text',
+              pointerEvents: 'auto'
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

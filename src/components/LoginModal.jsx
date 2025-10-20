@@ -76,10 +76,34 @@ function LoginModal() {
   return (
     <div className="login-modal-overlay">
       <div className="login-modal">
-        <h1 className="login-modal-title">CollabCanvas</h1>
+        <h1 className="login-modal-title">FlowCanvas</h1>
         <p className="login-modal-subtitle">
-          Real-time collaborative canvas
+          Real-time AI-powered collaborative canvas
         </p>
+
+        {/* Feature Highlights */}
+        <div className="features-grid">
+          <div className="feature-card">
+            <span className="feature-icon">🤝</span>
+            <h3>Real-Time Collaboration</h3>
+            <p>Work together with your team in real-time</p>
+          </div>
+          <div className="feature-card">
+            <span className="feature-icon">🤖</span>
+            <h3>AI Assistant</h3>
+            <p>Create and modify shapes with natural language</p>
+          </div>
+          <div className="feature-card">
+            <span className="feature-icon">🎨</span>
+            <h3>Intuitive Design</h3>
+            <p>Drag, draw, and customize with ease</p>
+          </div>
+          <div className="feature-card">
+            <span className="feature-icon">⚡</span>
+            <h3>Instant Sync</h3>
+            <p>See changes from your team instantly</p>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="login-form">
           <h2>{isSignup ? 'Sign Up' : 'Login'}</h2>

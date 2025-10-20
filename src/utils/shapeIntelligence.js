@@ -395,7 +395,7 @@ export function getDefaultShapeProperties(shapeType) {
     },
     text: {
       text: 'Text',
-      fontSize: 'medium',
+      fontSize: 24,
       fontWeight: 'normal',
       fontStyle: 'normal',
       fontFamily: 'Arial',

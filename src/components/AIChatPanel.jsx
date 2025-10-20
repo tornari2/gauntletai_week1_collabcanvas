@@ -52,7 +52,7 @@ function AIChatPanel() {
   };
 
   const exampleCommands = [
-    "Write a short poem",
+    "Create a short poem",
     "Create a red circle at the center",
     "Make a 3x3 grid of blue squares",
     "Make a login form",

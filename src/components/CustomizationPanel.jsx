@@ -8,6 +8,7 @@ function CustomizationPanel() {
   const { 
     shapes,
     selectedShapeId,
+    selectedShapeIds,
     fillColor, 
     setFillColor, 
     fillOpacity, 
@@ -49,6 +50,9 @@ function CustomizationPanel() {
 
   // Get the selected shape
   const selectedShape = selectedShapeId ? shapes.find(s => s.id === selectedShapeId) : null
+  
+  // Check if multiple shapes are selected
+  const isMultiSelect = selectedShapeIds.length > 0
 
   // Parse rgba color and extract components
   const parseRgbaColor = (colorSource) => {
@@ -278,7 +282,7 @@ function CustomizationPanel() {
   }
 
   return (
-    <div className="customization-panel">
+    <div className={`customization-panel ${isMultiSelect ? 'multi-select-mode' : ''}`}>
       <div className="viewport-info">
         <div className="viewport-info-item">
           <span className="viewport-label">Zoom:</span>
@@ -304,6 +308,7 @@ function CustomizationPanel() {
             value={localHue}
             onChange={(e) => handleHueChange(parseInt(e.target.value))}
             className="hue-slider"
+            disabled={isMultiSelect}
             style={{
               background: `linear-gradient(to right,
                 rgba(0, 0, 0, ${localOpacity}) 0%,
@@ -345,6 +350,7 @@ function CustomizationPanel() {
           step="0.01"
           value={localOpacity}
           onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+          disabled={isMultiSelect}
         />
       </div>
 
@@ -360,6 +366,7 @@ function CustomizationPanel() {
           step="1"
           value={localThickness}
           onChange={(e) => handleThicknessChange(parseInt(e.target.value))}
+          disabled={isMultiSelect}
         />
       </div>
 
@@ -370,6 +377,7 @@ function CustomizationPanel() {
             className={`border-style-btn ${localBorderStyle === 'solid' ? 'active' : ''}`}
             onClick={() => handleBorderStyleChange('solid')}
             title="Solid"
+            disabled={isMultiSelect}
           >
             <div className="border-preview solid-line"></div>
           </button>
@@ -377,6 +385,7 @@ function CustomizationPanel() {
             className={`border-style-btn ${localBorderStyle === 'dashed' ? 'active' : ''}`}
             onClick={() => handleBorderStyleChange('dashed')}
             title="Dashed"
+            disabled={isMultiSelect}
           >
             <div className="border-preview dashed-line"></div>
           </button>
@@ -384,6 +393,7 @@ function CustomizationPanel() {
             className={`border-style-btn ${localBorderStyle === 'dotted' ? 'active' : ''}`}
             onClick={() => handleBorderStyleChange('dotted')}
             title="Dotted"
+            disabled={isMultiSelect}
           >
             <div className="border-preview dotted-line"></div>
           </button>
@@ -396,18 +406,21 @@ function CustomizationPanel() {
           <button
             className={`font-size-btn ${localFontSize === 'small' ? 'active' : ''}`}
             onClick={() => handleFontSizeChange('small')}
+            disabled={isMultiSelect}
           >
             Small
           </button>
           <button
             className={`font-size-btn ${localFontSize === 'medium' ? 'active' : ''}`}
             onClick={() => handleFontSizeChange('medium')}
+            disabled={isMultiSelect}
           >
             Medium
           </button>
           <button
             className={`font-size-btn ${localFontSize === 'large' ? 'active' : ''}`}
             onClick={() => handleFontSizeChange('large')}
+            disabled={isMultiSelect}
           >
             Large
           </button>
@@ -421,6 +434,7 @@ function CustomizationPanel() {
             className={`text-style-btn ${localFontWeight === 'bold' ? 'active' : ''}`}
             onClick={handleFontWeightChange}
             title="Bold"
+            disabled={isMultiSelect}
           >
             <strong>B</strong>
           </button>
@@ -428,6 +442,7 @@ function CustomizationPanel() {
             className={`text-style-btn ${localFontStyle === 'italic' ? 'active' : ''}`}
             onClick={handleFontStyleChange}
             title="Italic"
+            disabled={isMultiSelect}
           >
             <em>I</em>
           </button>
@@ -435,6 +450,7 @@ function CustomizationPanel() {
             className={`text-style-btn ${localTextDecoration === 'underline' ? 'active' : ''}`}
             onClick={handleTextDecorationChange}
             title="Underline"
+            disabled={isMultiSelect}
           >
             <u>U</u>
           </button>
@@ -448,6 +464,7 @@ function CustomizationPanel() {
           value={localFontFamily}
           onChange={handleFontFamilyChange}
           className="font-family-select"
+          disabled={isMultiSelect}
         >
           <option value="Arial">Arial</option>
           <option value="Times New Roman">Times New Roman</option>
@@ -477,6 +494,7 @@ function CustomizationPanel() {
               }
             }}
             title={selectedShapeId ? "Send selected to front" : "Set default: new shapes will appear in front"}
+            disabled={isMultiSelect}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5l0 14M5 12l7-7 7 7" />
@@ -495,6 +513,7 @@ function CustomizationPanel() {
               }
             }}
             title={selectedShapeId ? "Send selected to back" : "Set default: new shapes will appear in back"}
+            disabled={isMultiSelect}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 19l0-14M5 12l7 7 7-7" />

@@ -353,3 +353,39 @@
 .layer-btn span {
   white-space: nowrap;
 }
+
+/* Multi-select mode - gray out the entire panel */
+.customization-panel.multi-select-mode {
+  opacity: 0.65;
+  pointer-events: auto;
+}
+
+/* Disabled state for all inputs */
+.customization-panel input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.customization-panel input[type="range"]:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  background: #999;
+}
+
+.customization-panel input[type="range"]:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  background: #999;
+}
+
+/* Disabled state for buttons */
+.customization-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Disabled state for select */
+.customization-panel select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: #f0f0f0;
+}
